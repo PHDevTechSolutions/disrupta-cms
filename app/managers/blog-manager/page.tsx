@@ -37,6 +37,7 @@ const BlogManagerContent = () => {
   const [mainTitle, setMainTitle] = useState("")
   const [category, setCategory] = useState("Industry News")
   const [status, setStatus] = useState("Published")
+  const [website, setWebsite] = useState("")
   const [mainImage, setMainImage] = useState<File | null>(null)
   const [mainImagePrev, setMainImagePrev] = useState<string | null>(null)
   const [sections, setSections] = useState<Section[]>([])
@@ -93,6 +94,7 @@ const BlogManagerContent = () => {
         title: mainTitle,
         category,
         status,
+        website,
         coverImage: finalMainImage,
         sections: updatedSections,
         updatedAt: serverTimestamp(),
@@ -125,6 +127,7 @@ const BlogManagerContent = () => {
     setMainImage(null)
     setSections([])
     setStatus("Published")
+    setWebsite("Disruptive")
   }
 
   return (
@@ -158,6 +161,7 @@ const BlogManagerContent = () => {
               <th className="px-8 py-6">Preview</th>
               <th className="px-8 py-6">Story Details</th>
               <th className="px-8 py-6 text-center">Status</th>
+              <th className="px-8 py-6 text-center">Website</th>
               <th className="px-8 py-6 text-right">Actions</th>
             </tr>
           </thead>
@@ -189,12 +193,22 @@ const BlogManagerContent = () => {
                     {blog.status}
                   </span>
                 </td>
+                <td className="px-8 py-6 text-center">
+                  <span
+                    className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                      blog.website === "Disruptive" ? "bg-green-50 text-green-500" : "bg-orange-50 text-orange-500"
+                    }`}
+                  >
+                    {blog.website}
+                  </span>
+                </td>
                 <td className="px-8 py-6 text-right">
                   <div className="flex justify-end gap-2">
                     <button
                       onClick={() => {
                         setEditingId(blog.id)
                         setMainTitle(blog.title)
+                        setWebsite(blog.website)
                         setCategory(blog.category)
                         setStatus(blog.status || "Published")
                         setMainImagePrev(blog.coverImage)
@@ -309,6 +323,21 @@ const BlogManagerContent = () => {
                       >
                         <option>Published</option>
                         <option>Draft</option>
+                      </select>
+                    </div>
+
+                      <div className="space-y-2">
+                      <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest block">
+                        Website
+                      </span>
+                      <select
+                        value={website}
+                        onChange={(e) => setWebsite(e.target.value)}
+                        className="font-black text-xs uppercase outline-none bg-transparent cursor-pointer text-gray-900 border-b-2 border-transparent focus:border-[#d11a2a] pb-1 transition-all"
+                      >
+                        <option>Disruptive</option>
+                        <option>Ecoshift</option>
+                        <option>VAH</option>
                       </select>
                     </div>
 

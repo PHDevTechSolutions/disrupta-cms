@@ -29,6 +29,7 @@ const CareersManagerContent = () => {
   const [category, setCategory] = useState("Sales")
   const [jobType, setJobType] = useState("Full Time")
   const [location, setLocation] = useState("")
+  const [website, setWebsite] = useState("Disruptive")
   const [qualifications, setQualifications] = useState<string[]>([""])
   const [status, setStatus] = useState("Open")
 
@@ -67,6 +68,7 @@ const CareersManagerContent = () => {
         category,
         jobType,
         location,
+        website,
         qualifications: filteredQuals,
         status,
         updatedAt: serverTimestamp(),
@@ -94,6 +96,7 @@ const CareersManagerContent = () => {
     setCategory("Sales")
     setJobType("Full Time")
     setLocation("")
+    setWebsite("Disruptive")
     setQualifications([""])
     setStatus("Open")
   }
@@ -131,6 +134,7 @@ const CareersManagerContent = () => {
               <th className="px-8 py-6">Location</th>
               <th className="px-8 py-6">Type</th>
               <th className="px-8 py-6 text-center">Status</th>
+              <th className="px-8 py-6 text-center">Website</th>
               <th className="px-8 py-6 text-right">Actions</th>
             </tr>
           </thead>
@@ -162,6 +166,15 @@ const CareersManagerContent = () => {
                     {job.status}
                   </span>
                 </td>
+                <td className="px-8 py-6 text-center">
+                  <span
+                    className={`text-[9px] font-black uppercase tracking-widest px-4 py-1.5 rounded-full ${
+                      job.website === "Disruptive" ? "bg-green-50 text-green-500" : "bg-red-50 text-red-500"
+                    }`}
+                  >
+                    {job.website}
+                  </span>
+                </td>
                 <td className="px-8 py-6 text-right">
                   <div className="flex justify-end gap-2">
                     <button
@@ -171,6 +184,7 @@ const CareersManagerContent = () => {
                         setCategory(job.category)
                         setJobType(job.jobType)
                         setLocation(job.location)
+                        setWebsite(job.website)
                         setQualifications(Array.isArray(job.qualifications) ? job.qualifications : [job.qualifications])
                         setStatus(job.status)
                         setIsModalOpen(true)
@@ -318,7 +332,20 @@ const CareersManagerContent = () => {
                       <option>Closed</option>
                     </select>
                   </div>
+                  <div className="space-y-5 col-span-2">
+                    <label className="text-[10px] font-black uppercase text-gray-400">Webite</label>
+                    <select
+                      value={website}
+                      onChange={(e) => setWebsite(e.target.value)}
+                      className="w-full font-black text-xs uppercase outline-none bg-gray-50 p-4 rounded-2xl border-none cursor-pointer focus:ring-2 focus:ring-[#d11a2a]/10"
+                    >
+                      <option>Disruptive</option>
+                      <option>Ecoshift</option>
+                      <option>VAH</option>
+                    </select>
+                  </div>
                 </div>
+                
 
                 {/* DYNAMIC QUALIFICATIONS */}
                 <div className="space-y-6 pt-6">

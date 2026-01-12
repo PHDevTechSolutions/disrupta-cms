@@ -7,7 +7,7 @@ import { Mail, Phone, MapPin, Package, Clock, User, Trash2, CheckCircle, Search 
 import { motion, AnimatePresence } from "framer-motion"
 import { PageWrapper } from "@/components/sidebar/page-wrapper"
 
-function ProductInquiriesContent() {
+function OrdersContent() {
   const [inquiries, setInquiries] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [searchTerm, setSearchTerm] = useState("")
@@ -223,11 +223,11 @@ function ProductInquiriesContent() {
   )
 }
 
-export default function QuoteInquiriesPage() {
+export default function OrdersPage() {
   return (
     <PageWrapper>
       <Suspense fallback={null}>
-        <ProductInquiriesContent />
+        <OrdersContent />
       </Suspense>
     </PageWrapper>
   )

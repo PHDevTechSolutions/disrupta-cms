@@ -38,10 +38,6 @@ const data = {
           url: "/inquiries/job-application",
         },
         {
-          title: "Quotation Inquiries",
-          url: "/inquiries/quote-inquiries",
-        },
-        {
           title: "Quotations",
           url: "/inquiries/quotation",
         },
@@ -59,6 +55,10 @@ const data = {
         {
           title: "Add Product",
           url: "/products/add-product",
+        },
+        {
+          title: "Orders",
+          url: "/products/orders",
         },
       ],
     },
