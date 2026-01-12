@@ -73,7 +73,7 @@ function AddNewProductPageContent() {
   const [selectedCats, setSelectedCats] = useState<string[]>([])
   const [selectedBrands, setSelectedBrands] = useState<string[]>([])
 
-  const [selectedWebsite, setSelectedWebsite] = useState("Ecoshift")
+  const [selectedWebsite, setSelectedWebsite] = useState("Disruptive")
 
   const currentClassification = WEBSITE_CLASSIFICATION[selectedWebsite as keyof typeof WEBSITE_CLASSIFICATION]
   const categories = currentClassification?.categories || []
@@ -193,8 +193,9 @@ function AddNewProductPageContent() {
                   onChange={(e) => handleWebsiteChange(e.target.value)}
                   className="w-full font-black text-xs uppercase outline-none bg-gray-50 p-4 rounded-2xl border-none cursor-pointer focus:ring-2 focus:ring-[#d11a2a]/10"
                 >
-                  <option value="Ecoshift">Ecoshift</option>
+                  
                   <option value="Disruptive">Disruptive</option>
+                  <option value="Ecoshift">Ecoshift</option>
                   <option value="VAH">VAH</option>
                 </select>
               </div>
