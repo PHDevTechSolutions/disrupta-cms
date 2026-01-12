@@ -1,82 +1,119 @@
 "use client"
 
-import * as React from "react"
-import { BookOpen, SquareTerminal, Inbox } from "lucide-react"
+import type * as React from "react"
+import { BookOpen, Command, FileText, Settings2, Package } from "lucide-react"
 
-import { NavMain } from "@/components/sidebar/nav-main"
-import { NavUser } from "@/components/sidebar/nav-user"
-
+import { NavMain } from "@/components/nav-main"
+import { NavSecondary } from "@/components/nav-secondary"
+import { NavUser } from "@/components/nav-user"
 import {
   Sidebar,
   SidebarContent,
   SidebarFooter,
   SidebarHeader,
-  SidebarRail,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
 } from "@/components/ui/sidebar"
 
 const data = {
   user: {
-    name: "shadcn",
-    email: "m@example.com",
+    name: "Admin User",
+    email: "admin@example.com",
     avatar: "/avatars/shadcn.jpg",
   },
   navMain: [
     {
-      title: "Product",
-      url: "#",
-      icon: SquareTerminal,
+      title: "Inquiries",
+      url: "/inquiries",
+      icon: FileText,
       isActive: true,
       items: [
-        { title: "All Product", url: "#" },
-        { title: "Add new product", url: "#" },
-        { title: "Orders", url: "#" },
+        {
+          title: "Customer Inquiries",
+          url: "/inquiries/customer-inquiries",
+        },
+        {
+          title: "Job Applications",
+          url: "/inquiries/job-application",
+        },
+        {
+          title: "Quotation Inquiries",
+          url: "/inquiries/quote-inquiries",
+        },
+        {
+          title: "Quotations",
+          url: "/inquiries/quotation",
+        },
       ],
     },
     {
-      title: "Pages",
-      url: "#",
-      icon: BookOpen,
+      title: "Products",
+      url: "/products",
+      icon: Package,
       items: [
-        { title: "All Blogs", url: "#" },
-        { title: "Careers", url: "#" },
+        {
+          title: "All Products",
+          url: "/products/all-products",
+        },
+        {
+          title: "Add Product",
+          url: "/products/add-product",
+        },
       ],
     },
     {
-      title: "Inquiries",
+      title: "Managers",
+      url: "/managers",
+      icon: Settings2,
+      items: [
+        {
+          title: "Blog Manager",
+          url: "/managers/blog-manager",
+        },
+        {
+          title: "Careers Manager",
+          url: "/managers/careers-manager",
+        },
+      ],
+    },
+  ],
+  navSecondary: [
+    {
+      title: "Support",
       url: "#",
       icon: BookOpen,
-      items: [
-        { title: "Customer Inquiries", url: "#" },
-        { title: "Quotation", url: "#" },
-        { title: "Job Application", url: "#" },
-      ],
     },
   ],
 }
 
-type AppSidebarProps = React.ComponentProps<typeof Sidebar> & {
-  onNavigate: (view: string) => void
-}
-
-export function AppSidebar({ onNavigate, ...props }: AppSidebarProps) {
+export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   return (
-    <Sidebar collapsible="icon" {...props}>
-      {/* Optional: logo / brand */}
-      <SidebarHeader className="px-3 py-2">
-        <span className="text-sm font-semibold tracking-tight">
-          Disrupta CMS
-        </span>
+    <Sidebar variant="inset" {...props}>
+      <SidebarHeader>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton size="lg" asChild>
+              <a href="/">
+                <div className="bg-sidebar-primary text-sidebar-primary-foreground flex aspect-square size-8 items-center justify-center rounded-lg">
+                  <Command className="size-4" />
+                </div>
+                <div className="grid flex-1 text-left text-sm leading-tight">
+                  <span className="truncate font-medium">DisruptAcms</span>
+                  <span className="truncate text-xs">Management</span>
+                </div>
+              </a>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
       </SidebarHeader>
-
       <SidebarContent>
-        <NavMain items={data.navMain} onNavigate={onNavigate} />
+        <NavMain items={data.navMain} />
+        <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
-
       <SidebarFooter>
         <NavUser user={data.user} />
       </SidebarFooter>
-
-      <SidebarRail />
     </Sidebar>
   )
 }
