@@ -76,7 +76,7 @@ export function AppSidebar() {
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton href="/auth/login" className="w-full text-destructive hover:bg-destructive/10">
+            <SidebarMenuButton className="w-full text-destructive hover:bg-destructive/10">
               <LogOut className="h-4 w-4" />
               <span>Logout</span>
             </SidebarMenuButton>
