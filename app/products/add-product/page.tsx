@@ -1,577 +1,357 @@
 "use client"
 
+import * as React from "react"
 import { useState, useEffect } from "react"
-import { usePathname } from "next/navigation"
-import { db } from "@/lib/firebase"
-import {
-  collection,
-  addDoc,
-  serverTimestamp,
-  doc,
-  getDoc,
-  setDoc,
-} from "firebase/firestore"
-import {
-  ImagePlus,
-  UploadCloud,
-  PlusCircle,
-  X,
-  Loader2,
-  AlignLeft,
-  Globe,
-  Trash2,
-  ListPlus,
+import { db } from "@/lib/firebase"; 
+import { 
+  collection, addDoc, serverTimestamp, 
+  deleteDoc, doc, onSnapshot, updateDoc, arrayUnion 
+} from "firebase/firestore";
+import { 
+  ImagePlus, UploadCloud, X, Loader2, 
+  AlignLeft, Trash2, Plus, Globe, Tag, Factory, Settings2 
 } from "lucide-react"
+
+// UI Components
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
-import { Textarea } from "@/components/ui/textarea"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { toast } from "sonner" 
 import {
-  Breadcrumb,
-  BreadcrumbItem,
-  BreadcrumbList,
-  BreadcrumbPage,
-} from "@/components/ui/breadcrumb"
-import { PageWrapper } from "@/components/sidebar/page-wrapper"
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 
-// ------------------ UTILS ------------------
-const toCaps = (str: string) => str.toUpperCase().trim()
+// --- TYPES ---
+interface ListItem { id: string; name: string; }
+interface SpecRow { name: string; value: string; }
+interface SpecBlock { id: number; label: string; rows: SpecRow[]; }
 
-// ------------------ INITIAL DATA ------------------
-const INITIAL_CLASSIFICATION: Record<string, { brands: string[]; categories: string[] }> = {
-  ECOSHIFTCORP: {
-    brands: ["ECOSHIFT"],
-    categories: [
-      "WEATHERPROOF FIXTURE",
-      "WALL LAMP",
-      "UV DISINFECTION LIGHT",
-      "TUBE LIGHT",
-      "TRACK LIGHT",
-      "SWIMMING POOL LIGHT",
-      "STRIP LIGHT",
-      "STREETLIGHT",
-      "SPOTLIGHT",
-      "SOLAR STREET LIGHT",
-    ],
-  },
-  DISRUPTIVESOLUTIONSINC: {
-    brands: ["BUILDCHEM", "JISO", "LIT", "ZUMTOBEL", "LUXIONA"],
-    categories: ["UNCATEGORIZED", "JISO - BOLLARD LIGHT", "LIT - LED BATTEN", "LUXIONA - WALL LIGHT"],
-  },
-  VALUEACQUISITIONSHOLDINGS: {
-    brands: ["BUILDCHEM", "OKO", "PROGRESSIVE DYNAMICS INC.", "PROGRESSIVE MATERIALS SOLUTIONS INC."],
-    categories: [
-      "SUPERPLASTICIZERS & HIGH-RANGE WATER REDUCERS",
-      "SET RETARDERS & ACCELERATORS",
-      "UNDERWATER CONCRETE SOLUTIONS",
-      "WATERPROOFING SOLUTIONS",
-    ],
-  },
+interface CustomSectionData {
+  id: string;
+  title: string;
+  items: ListItem[];
+  selected: string[];
 }
 
-// ------------------ MAIN COMPONENT ------------------
-export default function AddNewProductPageContent() {
-  const pathname = usePathname()
-  const pageTitle = pathname?.split("/").pop()?.replace(/-/g, " ") || "Add New Product"
+interface SidebarSectionProps {
+  label: string;
+  icon: React.ReactNode;
+  items: ListItem[];
+  selected: string[];
+  onCheck: (value: string) => void;
+  val: string;
+  setVal: (value: string) => void;
+  onAdd: () => void;
+  onDelete: (id: string) => void;
+  customAddLogic?: (val: string) => void;
+  isDynamic?: boolean;
+  onDeleteSection?: () => void;
+}
 
-  // --- PRODUCT STATES ---
-  const [isPublishing, setIsPublishing] = useState(false)
-  const [productName, setProductName] = useState("")
-  const [sku, setSku] = useState("")
-  const [regPrice, setRegPrice] = useState("")
-  const [salePrice, setSalePrice] = useState("")
-  const [shortDescription, setShortDescription] = useState("")
-  const [description, setDescription] = useState("")
+export default function AddNewProduct() {
+  const CLOUDINARY_UPLOAD_PRESET = "taskflow_preset"; 
+  const CLOUDINARY_CLOUD_NAME = "dvmpn8mjh";
 
-  // --- SPEC STATE ---
-  const [specs, setSpecs] = useState([{ id: 1, key: "WATTS", value: "" }, { id: 2, key: "LUMENS", value: "" }])
+  const [isPublishing, setIsPublishing] = useState(false);
+  const [productName, setProductName] = useState("");
+  const [shortDesc, setShortDesc] = useState("");
+  const [sku, setSku] = useState("");
+  const [regPrice, setRegPrice] = useState("");
+  const [salePrice, setSalePrice] = useState("");
+  
+  const [descBlocks, setDescBlocks] = useState<SpecBlock[]>([
+    { id: Date.now(), label: "Technical Specifications", rows: [{ name: "Watts", value: "" }, { name: "Voltage", value: "" }] }
+  ]);
 
-  const [mainImage, setMainImage] = useState<File | null>(null)
-  const [galleryImage, setGalleryImage] = useState<File | null>(null)
-  const [selectedCats, setSelectedCats] = useState<string[]>([])
-  const [selectedBrands, setSelectedBrands] = useState<string[]>([])
+  const [categories, setCategories] = useState<ListItem[]>([]);
+  const [brands, setBrands] = useState<ListItem[]>([]);
+  const [websites, setWebsites] = useState<ListItem[]>([]);
+  const [customSections, setCustomSections] = useState<CustomSectionData[]>([]);
 
-  // --- CLASSIFICATION STATE ---
-  const [classificationData, setClassificationData] = useState<Record<string, { brands: string[]; categories: string[] }>>(INITIAL_CLASSIFICATION)
-  const [selectedWebsite, setSelectedWebsite] = useState<string>("Disruptive")
+  const [newCat, setNewCat] = useState("");
+  const [newBrand, setNewBrand] = useState("");
+  const [newWeb, setNewWeb] = useState("");
+  const [selectedCats, setSelectedCats] = useState<string[]>([]);
+  const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
+  const [selectedWebs, setSelectedWebs] = useState<string[]>([]);
 
-  const currentClassification = classificationData[selectedWebsite]
+  const [isAddingNewSection, setIsAddingNewSection] = useState(false);
+  const [newSectionTitle, setNewSectionTitle] = useState("");
 
-  // --- Inputs for adding new items ---
-  const [newCategoryInput, setNewCategoryInput] = useState("")
-  const [newBrandInput, setNewBrandInput] = useState("")
+  const [mainImage, setMainImage] = useState<File | null>(null);
+  const [galleryImage, setGalleryImage] = useState<File | null>(null);
 
-  // --- FETCH FIRESTORE CLASSIFICATION ON MOUNT ---
   useEffect(() => {
-    const fetchClassification = async () => {
-      for (const site of Object.keys(INITIAL_CLASSIFICATION)) {
-        const docRef = doc(db, "classifications", site)
-        const snapshot = await getDoc(docRef)
-        if (snapshot.exists()) {
-          const data = snapshot.data() as { brands: string[]; categories: string[] }
-          setClassificationData((prev) => ({
-            ...prev,
-            [site]: { 
-              brands: Array.from(new Set([...prev[site].brands, ...data.brands])), 
-              categories: Array.from(new Set([...prev[site].categories, ...data.categories])) 
-            },
-          }))
-        } else {
-          // Create doc if doesn't exist
-          await setDoc(docRef, INITIAL_CLASSIFICATION[site])
-        }
-      }
-    }
-    fetchClassification()
-  }, [])
+    const unsubCats = onSnapshot(collection(db, "categories"), (snap) => {
+      setCategories(snap.docs.map(d => ({ id: d.id, name: d.data().name })));
+    });
+    const unsubBrands = onSnapshot(collection(db, "brands"), (snap) => {
+      setBrands(snap.docs.map(d => ({ id: d.id, name: d.data().name })));
+    });
+    const unsubWebs = onSnapshot(collection(db, "websites"), (snap) => {
+      setWebsites(snap.docs.map(d => ({ id: d.id, name: d.data().name })));
+    });
+    const unsubCustom = onSnapshot(collection(db, "custom_sections"), (snap) => {
+      setCustomSections(snap.docs.map(d => ({
+        id: d.id,
+        title: d.data().title,
+        items: d.data().items || [],
+        selected: [] 
+      })));
+    });
+    return () => { unsubCats(); unsubBrands(); unsubWebs(); unsubCustom(); };
+  }, []);
 
-  // --- HANDLERS ---
-  const handleWebsiteChange = (website: string) => {
-    setSelectedWebsite(website)
-    setSelectedBrands([])
-    setSelectedCats([])
-  }
+  const handleQuickAdd = async (colName: string, val: string, setVal: (v: string) => void) => {
+    if (!val.trim()) return;
+    try {
+      await addDoc(collection(db, colName), { name: val.trim(), createdAt: serverTimestamp() });
+      setVal("");
+      toast.success("Added to database");
+    } catch (err) { toast.error("Failed to add"); }
+  };
 
-  const handleCheckbox = (val: string, type: "cat" | "brand") => {
-    const setter = type === "cat" ? setSelectedCats : setSelectedBrands
-    const current = type === "cat" ? selectedCats : selectedBrands
-    setter(current.includes(val) ? current.filter((i) => i !== val) : [...current, val])
-  }
+  const handleDeleteItem = async (colName: string, id: string) => {
+    try {
+      await deleteDoc(doc(db, colName, id));
+      toast.success("Deleted successfully");
+    } catch (err) { toast.error("Delete failed"); }
+  };
 
-  const addSpecRow = () => setSpecs([...specs, { id: Date.now(), key: "", value: "" }])
-  const removeSpecRow = (id: number) => setSpecs(specs.filter((s) => s.id !== id))
-  const updateSpec = (id: number, field: "key" | "value", newValue: string) => {
-    setSpecs(specs.map((s) => (s.id === id ? { ...s, [field]: toCaps(newValue) } : s)))
-  }
+  const handleCreateNewSection = async () => {
+    if (!newSectionTitle.trim()) return;
+    try {
+      await addDoc(collection(db, "custom_sections"), {
+        title: newSectionTitle.toUpperCase(),
+        items: [],
+        createdAt: serverTimestamp()
+      });
+      setNewSectionTitle("");
+      setIsAddingNewSection(false);
+      toast.success("New section added to DB");
+    } catch (err) { toast.error("Error creating section"); }
+  };
 
-  // --- CATEGORY HANDLERS ---
-  const addNewCategory = async () => {
-    const category = toCaps(newCategoryInput)
-    if (!category) return
-    if (!currentClassification.categories.includes(category)) {
-      const updated = [category, ...currentClassification.categories]
-      setClassificationData((prev) => ({ ...prev, [selectedWebsite]: { ...prev[selectedWebsite], categories: updated } }))
-      await setDoc(doc(db, "classifications", selectedWebsite), {
-        brands: currentClassification.brands,
-        categories: updated,
-      })
-    }
-    setNewCategoryInput("")
-  }
-
-  const removeCategory = async (cat: string) => {
-    const updated = currentClassification.categories.filter((c) => c !== cat)
-    setClassificationData((prev) => ({ ...prev, [selectedWebsite]: { ...prev[selectedWebsite], categories: updated } }))
-    setSelectedCats((prev) => prev.filter((c) => c !== cat))
-    await setDoc(doc(db, "classifications", selectedWebsite), {
-      brands: currentClassification.brands,
-      categories: updated,
-    })
-  }
-
-  // --- BRAND HANDLERS ---
-  const addNewBrand = async () => {
-    const brand = toCaps(newBrandInput)
-    if (!brand) return
-    if (!currentClassification.brands.includes(brand)) {
-      const updated = [brand, ...currentClassification.brands]
-      setClassificationData((prev) => ({ ...prev, [selectedWebsite]: { ...prev[selectedWebsite], brands: updated } }))
-      await setDoc(doc(db, "classifications", selectedWebsite), {
-        brands: updated,
-        categories: currentClassification.categories,
-      })
-    }
-    setNewBrandInput("")
-  }
-
-  const removeBrand = async (brand: string) => {
-    const updated = currentClassification.brands.filter((b) => b !== brand)
-    setClassificationData((prev) => ({ ...prev, [selectedWebsite]: { ...prev[selectedWebsite], brands: updated } }))
-    setSelectedBrands((prev) => prev.filter((b) => b !== brand))
-    await setDoc(doc(db, "classifications", selectedWebsite), {
-      brands: updated,
-      categories: currentClassification.categories,
-    })
-  }
-
-  // --- CLOUDINARY ---
-  const CLOUDINARY_UPLOAD_PRESET = "taskflow_preset"
-  const CLOUDINARY_CLOUD_NAME = "dvmpn8mjh"
+  const handleAddChoiceToCustom = async (sectionId: string, choiceName: string) => {
+    if (!choiceName.trim()) return;
+    try {
+      const sectionRef = doc(db, "custom_sections", sectionId);
+      await updateDoc(sectionRef, {
+        items: arrayUnion({ id: Date.now().toString(), name: choiceName })
+      });
+    } catch (err) { toast.error("Error adding choice"); }
+  };
 
   const uploadToCloudinary = async (file: File) => {
-    const formData = new FormData()
-    formData.append("file", file)
-    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET)
-    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData })
-    const data = await res.json()
-    if (!res.ok) throw new Error(data?.error?.message || "Cloudinary upload failed")
-    return data.secure_url
-  }
+    const formData = new FormData();
+    formData.append("file", file);
+    formData.append("upload_preset", CLOUDINARY_UPLOAD_PRESET);
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/image/upload`, { method: "POST", body: formData });
+    const data = await res.json();
+    return data.secure_url;
+  };
 
-  // --- PUBLISH PRODUCT ---
   const handlePublish = async () => {
-    if (!productName || !mainImage) return alert("Paki-lagay ang Product Name at Main Image.")
-    setIsPublishing(true)
+    if (!productName || !mainImage) return toast.error("Product Name and Featured Image are required!");
+    setIsPublishing(true);
+    const publishToast = toast.loading("Publishing product...");
     try {
-      const mainUrl = await uploadToCloudinary(mainImage)
-      const galleryUrl = galleryImage ? await uploadToCloudinary(galleryImage) : ""
-      const cleanSpecs = specs.filter((s) => s.key && s.value)
+      const mainUrl = await uploadToCloudinary(mainImage);
+      const galleryUrl = galleryImage ? await uploadToCloudinary(galleryImage) : "";
+      const dynamicSpecs = customSections
+        .filter(s => s.selected.length > 0)
+        .map(s => ({ title: s.title, value: s.selected[0] }));
+
       await addDoc(collection(db, "products"), {
-        name: toCaps(productName),
-        sku: toCaps(sku),
+        name: productName,
+        shortDescription: shortDesc,
+        sku,
         regularPrice: Number(regPrice) || 0,
         salePrice: Number(salePrice) || 0,
-        shortDescription,
-        description,
-        specifications: cleanSpecs,
+        technicalSpecs: descBlocks,
+        dynamicSpecs,
         mainImage: mainUrl,
         galleryImage: galleryUrl,
-        categories: selectedCats.map(toCaps),
-        brands: selectedBrands.map(toCaps),
-        website: selectedWebsite,
+        category: selectedCats[0] || "Uncategorized",
+        brand: selectedBrands[0] || "Generic", 
+        website: selectedWebs[0] || "N/A", 
         createdAt: serverTimestamp(),
-      })
-      alert("Product Published Successfully!")
-      window.location.reload()
-    } catch (error: any) {
-      alert("Error: " + error.message)
-    } finally {
-      setIsPublishing(false)
-    }
-  }
+      });
+      toast.success("Product Published!", { id: publishToast });
+      setTimeout(() => window.location.reload(), 1500);
+    } catch (error) { toast.error("Publishing failed", { id: publishToast }); }
+    finally { setIsPublishing(false); }
+  };
 
-  // ----- RETURN PAGE WRAPPER -----
   return (
-    <PageWrapper>
-      <header className="flex h-16 items-center gap-2 border-b px-4 mb-4">
-    <Breadcrumb>
-      <BreadcrumbList>
-        <BreadcrumbItem>
-          <BreadcrumbPage className="capitalize font-black italic tracking-tighter text-[#d11a2a]">
-            {pageTitle}
-          </BreadcrumbPage>
-        </BreadcrumbItem>
-      </BreadcrumbList>
-    </Breadcrumb>
-  </header>
-
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-slate-50 min-h-screen">
-    {/* LEFT COLUMN */}
-    <div className="md:col-span-2 space-y-6">
-      {/* PRODUCT INFORMATION CARD */}
-      <Card className="shadow-sm border-none ring-1 ring-slate-200">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <AlignLeft className="w-5 h-5 text-blue-500" /> Product Information
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6">
-          {/* Product Name */}
-          <div className="space-y-2">
-            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Product Name</Label>
-            <Input
-              className="h-12 text-lg font-bold"
-              value={productName}
-              onChange={(e) => setProductName(toCaps(e.target.value))}
-              placeholder="e.g. ZUMTOBEL PENDANT LUMINAIRE"
-            />
-          </div>
-
-          {/* Short Description */}
-          <div className="space-y-2">
-            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Short Description</Label>
-            <Input
-              className="h-12 text-sm"
-              value={shortDescription}
-              onChange={(e) => setShortDescription(e.target.value)}
-              placeholder="Brief description..."
-            />
-          </div>
-
-          {/* Description */}
-          <div className="space-y-2">
-            <Label className="text-[10px] font-black uppercase tracking-widest text-slate-400">Description</Label>
-            <Textarea
-              className="text-sm"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="Full product description..."
-              rows={4}
-            />
-          </div>
-
-          {/* Website selection */}
-          <div className="space-y-3">
-            <label className="text-[10px] font-black uppercase text-gray-400 flex items-center gap-2">
-              <Globe size={12} className="text-[#d11a2a]" /> Select Website
-            </label>
-            <select
-              value={selectedWebsite}
-              onChange={(e) => handleWebsiteChange(e.target.value)}
-              className="w-full font-black text-xs uppercase outline-none bg-gray-50 p-4 rounded-2xl border-none cursor-pointer focus:ring-2 focus:ring-[#d11a2a]/10"
-            >
-              {Object.keys(classificationData).map((site) => (
-                <option key={site} value={site}>{site}</option>
-              ))}
-            </select>
-          </div>
-
-          {/* Specifications */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center bg-blue-50/50 p-3 rounded-xl border border-blue-100">
-              <Label className="font-black text-[10px] uppercase tracking-widest text-blue-600">
-                Product Specifications
-              </Label>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="text-blue-600 font-bold text-[10px] uppercase hover:bg-blue-100"
-                onClick={addSpecRow}
-              >
-                <PlusCircle className="w-4 h-4 mr-1" /> Add Spec
-              </Button>
-            </div>
-
+    <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-slate-50 min-h-screen">
+      <div className="md:col-span-2 space-y-6">
+        <Card className="shadow-sm border-none ring-1 ring-slate-200">
+          <CardHeader><CardTitle className="flex items-center gap-2 text-slate-700 font-black text-xs uppercase tracking-widest"><AlignLeft className="w-4 h-4 text-blue-500"/> Product Details</CardTitle></CardHeader>
+          <CardContent className="space-y-6">
             <div className="space-y-2">
-              {specs.map((spec) => (
-                <div key={spec.id} className="flex gap-3 items-center group">
-                  <div className="w-1/3">
-                    <Input
-                      placeholder="Name (e.g. WATTS)"
-                      className="font-bold text-xs uppercase bg-slate-50 border-slate-200"
-                      value={spec.key}
-                      onChange={(e) => updateSpec(spec.id, "key", e.target.value)}
-                    />
-                  </div>
-                  <div className="flex-1">
-                    <Input
-                      placeholder="Value (e.g. 15W)"
-                      className="font-medium text-sm border-slate-200"
-                      value={spec.value}
-                      onChange={(e) => updateSpec(spec.id, "value", e.target.value)}
-                    />
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-8 w-8 text-slate-300 hover:text-red-500 hover:bg-red-50"
-                    onClick={() => removeSpecRow(spec.id)}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              ))}
-              {specs.length === 0 && (
-                 <div className="text-center py-8 text-slate-400 text-xs italic border-2 border-dashed rounded-xl">
-                    No specifications added.
-                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* SKU / Prices */}
-          <div className="grid grid-cols-3 gap-4 pt-4 border-t border-slate-100">
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-400">SKU</Label>
-              <Input className="bg-slate-50 font-bold" value={sku} onChange={(e) => setSku(toCaps(e.target.value))} />
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Product Name</Label>
+              <Input className="h-12 text-lg font-bold border-slate-200" value={productName} onChange={(e) => setProductName(e.target.value)} placeholder="Enter product name..." />
             </div>
             <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-400">Reg. Price</Label>
-              <Input type="number" className="bg-slate-50 font-bold" value={regPrice} onChange={(e) => setRegPrice(e.target.value)} />
+              <Label className="text-[10px] font-black uppercase text-slate-400 tracking-tighter">Short Description</Label>
+              <Input className="h-12 text-sm border-slate-200" value={shortDesc} onChange={(e) => setShortDesc(e.target.value)} placeholder="Enter description..." />
             </div>
-            <div className="space-y-2">
-              <Label className="text-[10px] font-black uppercase text-slate-400">Sale Price</Label>
-              <Input type="number" className="bg-slate-50 font-bold" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} />
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
-      {/* Gallery Card */}
-      <Card className="border-none ring-1 ring-slate-200 shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-sm font-black uppercase tracking-widest text-slate-500">
-            Product Gallery
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <Label htmlFor="gallery-file" className="cursor-pointer">
-            <div className="border-2 border-dashed border-slate-200 rounded-2xl p-10 flex flex-col items-center justify-center bg-slate-50 hover:bg-slate-100 transition-all group">
-              {galleryImage ? (
-                <img
-                  src={URL.createObjectURL(galleryImage) || "/placeholder.svg"}
-                  className="h-40 object-contain rounded-lg shadow-md"
-                />
-              ) : (
-                <>
-                  <UploadCloud className="w-12 h-12 mb-2 text-slate-300 group-hover:text-blue-400" />
-                  <p className="text-xs font-bold text-slate-400 uppercase tracking-widest">
-                    Click to upload gallery image
-                  </p>
-                </>
-              )}
-            </div>
-            <input
-              type="file"
-              id="gallery-file"
-              className="hidden"
-              onChange={(e) => setGalleryImage(e.target.files?.[0] || null)}
-            />
-          </Label>
-        </CardContent>
-      </Card>
-    </div>
-
-    {/* RIGHT COLUMN */}
-    <div className="space-y-6">
-      {/* Main Image Card */}
-      <Card className="border-none ring-1 ring-slate-200 shadow-sm overflow-hidden">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-          <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest text-center">
-            Featured Image
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="pt-6">
-          <Label htmlFor="main-file" className="cursor-pointer">
-            <div className="aspect-square border-2 border-dashed border-slate-200 rounded-2xl flex flex-col items-center justify-center bg-white hover:border-blue-400 hover:bg-blue-50/30 transition-all overflow-hidden relative">
-              {mainImage ? (
-                <img
-                  src={URL.createObjectURL(mainImage) || "/placeholder.svg"}
-                  className="w-full h-full object-contain p-4"
-                />
-              ) : (
-                <div className="text-center p-4">
-                  <ImagePlus className="w-10 h-10 mb-2 text-blue-500 mx-auto opacity-50" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-slate-400">
-                    Set Main Image
-                  </span>
-                </div>
-              )}
-            </div>
-            <input
-              type="file"
-              id="main-file"
-              className="hidden"
-              onChange={(e) => setMainImage(e.target.files?.[0] || null)}
-            />
-          </Label>
-        </CardContent>
-      </Card>
-
-      {/* Classification Card (Brands & Categories) */}
-      <Card className="border-none ring-1 ring-slate-200 shadow-sm">
-        <CardHeader className="bg-slate-50/50 border-b border-slate-100">
-          <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
-            Classification ({selectedWebsite})
-          </CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-6 pt-6">
-          {/* Categories Section */}
-          <div className="space-y-3">
-            <Label className="text-[9px] font-black uppercase text-blue-600">Categories</Label>
-            <div className="flex gap-2 mb-2">
-              <Input
-                placeholder="Add new category..."
-                className="h-8 text-[11px] bg-slate-50"
-                value={newCategoryInput}
-                onChange={(e) => setNewCategoryInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addNewCategory()}
-              />
-              <Button size="sm" onClick={addNewCategory} className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700">
-                <ListPlus className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="space-y-1 max-h-40 overflow-y-auto pr-1 custom-scrollbar border-t border-slate-100 pt-2">
-              {currentClassification?.categories.map((cat) => (
-                <div key={cat} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 group transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <Checkbox
-                      id={cat}
-                      checked={selectedCats.includes(cat)}
-                      onCheckedChange={() => handleCheckbox(cat, "cat")}
-                      className="border-slate-300"
-                    />
-                    <Label htmlFor={cat} className="text-xs font-bold text-slate-600 cursor-pointer">
-                      {cat}
-                    </Label>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                    onClick={() => removeCategory(cat)}
-                    title="Remove Category"
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
+            <div className="space-y-4">
+               {descBlocks.map((block, bIdx) => (
+                <div key={block.id} className="p-5 border-2 border-slate-100 rounded-2xl relative bg-white shadow-sm">
+                   <Input className="mb-4 h-8 text-[11px] font-black uppercase w-1/2 bg-slate-50 border-none" value={block.label} onChange={(e) => { const nb = [...descBlocks]; nb[bIdx].label = e.target.value; setDescBlocks(nb); }} />
+                   <div className="space-y-2">
+                      {block.rows.map((row, rIdx) => (
+                        <div key={rIdx} className="grid grid-cols-12 gap-2">
+                          <Input className="col-span-5 h-9 text-xs font-bold" value={row.name} onChange={(e) => { const nb = [...descBlocks]; nb[bIdx].rows[rIdx].name = e.target.value; setDescBlocks(nb); }} placeholder="Label" />
+                          <Input className="col-span-6 h-9 text-xs" value={row.value} onChange={(e) => { const nb = [...descBlocks]; nb[bIdx].rows[rIdx].value = e.target.value; setDescBlocks(nb); }} placeholder="Value" />
+                          <button onClick={() => { const nb = [...descBlocks]; nb[bIdx].rows = nb[bIdx].rows.filter((_, i) => i !== rIdx); setDescBlocks(nb); }} className="col-span-1 flex justify-center items-center"><Trash2 className="w-4 h-4 text-slate-300 hover:text-red-500"/></button>
+                        </div>
+                      ))}
+                      <Button variant="outline" size="sm" className="w-full text-[10px] font-bold border-dashed border-2" onClick={() => { const nb = [...descBlocks]; nb[bIdx].rows.push({name:"", value:""}); setDescBlocks(nb); }}>+ ADD SPEC ROW</Button>
+                   </div>
                 </div>
               ))}
             </div>
-          </div>
 
-          {/* Brands Section */}
-          <div className="space-y-3 pt-4 border-t border-slate-100">
-            <Label className="text-[9px] font-black uppercase text-blue-600">Brands</Label>
-            <div className="flex gap-2 mb-2">
-              <Input
-                placeholder="Add new brand..."
-                className="h-8 text-[11px] bg-slate-50"
-                value={newBrandInput}
-                onChange={(e) => setNewBrandInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && addNewBrand()}
-              />
-              <Button size="sm" onClick={addNewBrand} className="h-8 w-8 p-0 bg-blue-600 hover:bg-blue-700">
-                <PlusCircle className="w-4 h-4" />
-              </Button>
-            </div>
-            <div className="space-y-1 max-h-40 overflow-y-auto pr-1 custom-scrollbar border-t border-slate-100 pt-2">
-              {currentClassification?.brands.map((brand) => (
-                <div key={brand} className="flex items-center justify-between p-2 rounded-lg hover:bg-slate-50 group transition-colors">
-                  <div className="flex items-center space-x-3">
-                    <Checkbox
-                      id={brand}
-                      checked={selectedBrands.includes(brand)}
-                      onCheckedChange={() => handleCheckbox(brand, "brand")}
-                      className="border-slate-300"
-                    />
-                    <Label htmlFor={brand} className="text-xs font-bold text-slate-600 cursor-pointer">
-                      {brand}
-                    </Label>
+            <div className="grid grid-cols-2 gap-6 pt-4 border-t border-slate-100">
+               <div className="space-y-2">
+                  <Label className="text-[15px] font-black uppercase text-slate-400 tracking-tighter">Gallery Image</Label>
+                  <Label htmlFor="gallery-file" className="cursor-pointer">
+                    <div className="border-2 border-dashed rounded-xl p-4 flex flex-col items-center bg-slate-50 hover:bg-slate-100 h-60 w-full justify-center transition-all border-slate-200">
+                      {galleryImage ? <img src={URL.createObjectURL(galleryImage)} className="h-full object-contain" /> : <><UploadCloud className="w-6 h-6 mb-1 text-slate-300"/><p className="text-[13px] font-bold text-slate-400 uppercase">Upload Gallery</p></>}
+                    </div>
+                    <input type="file" id="gallery-file" className="hidden" onChange={(e) => setGalleryImage(e.target.files?.[0] || null)} />
+                  </Label>
+               </div>
+               <div className="space-y-3">
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400">Reg Price</Label><Input className="h-9 text-xs font-bold" value={regPrice} onChange={(e) => setRegPrice(e.target.value)} /></div>
+                    <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400">Sale Price</Label><Input className="h-9 text-xs font-bold text-red-500" value={salePrice} onChange={(e) => setSalePrice(e.target.value)} /></div>
                   </div>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-slate-300 hover:text-red-500 hover:bg-red-50 opacity-0 group-hover:opacity-100 transition-all"
-                    onClick={() => removeBrand(brand)}
-                    title="Remove Brand"
-                  >
-                    <X className="w-3 h-3" />
-                  </Button>
-                </div>
-              ))}
+                  <div className="space-y-1"><Label className="text-[10px] font-black uppercase text-slate-400">SKU / Model</Label><Input className="h-9 text-xs font-bold" value={sku} onChange={(e) => setSku(e.target.value)} /></div>
+               </div>
             </div>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Publish Button */}
-      <Button
-        disabled={isPublishing}
-        onClick={handlePublish}
-        className="w-full bg-[#d11a2a] hover:bg-[#b01622] h-16 rounded-2xl font-black uppercase tracking-[0.2em] shadow-xl shadow-red-500/20 transition-all hover:scale-[1.02] active:scale-95"
-      >
-        {isPublishing ? (
-          <>
-            <Loader2 className="animate-spin mr-2" /> Publishing...
-          </>
-        ) : (
-          "Publish Product"
-        )}
-      </Button>
-    </div>
+          </CardContent>
+        </Card>
       </div>
-    </PageWrapper>
+
+      <div className="space-y-6">
+        <Card className="border-none ring-1 ring-slate-200 overflow-hidden shadow-sm">
+          <CardHeader className="bg-slate-50/50 border-b py-3 text-center"><CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Featured Image</CardTitle></CardHeader>
+          <CardContent className="pt-6">
+            <Label htmlFor="main-file" className="cursor-pointer">
+              <div className="aspect-square border-2 border-dashed rounded-2xl flex flex-col items-center justify-center hover:bg-blue-50/30 transition-all overflow-hidden bg-white border-slate-200">
+                {mainImage ? <img src={URL.createObjectURL(mainImage)} className="w-full h-full object-contain p-2" /> : <div className="text-center"><ImagePlus className="w-90 h-10 mb-2 text-blue-500 mx-auto opacity-40"/><span className="text-[10px] font-black uppercase text-slate-400 block">Upload Main Image</span></div>}
+              </div>
+              <input type="file" id="main-file" className="hidden" onChange={(e) => setMainImage(e.target.files?.[0] || null)} />
+            </Label>
+          </CardContent>
+        </Card>
+
+        <Card className="border-none ring-1 ring-slate-200 shadow-sm overflow-hidden">
+          <CardHeader className="bg-slate-50/50 border-b py-3 text-center"><CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">Classification</CardTitle></CardHeader>
+          <CardContent className="space-y-6 pt-6">
+            <SidebarSection label="Website" icon={<Globe className="w-3 h-3"/>} items={websites} selected={selectedWebs} onCheck={(v: string) => setSelectedWebs(selectedWebs.includes(v) ? [] : [v])} val={newWeb} setVal={setNewWeb} onAdd={() => handleQuickAdd("websites", newWeb, setNewWeb)} onDelete={(id: string) => handleDeleteItem("websites", id)} />
+            <SidebarSection label="Category" icon={<Tag className="w-3 h-3"/>} items={categories} selected={selectedCats} onCheck={(v: string) => setSelectedCats(selectedCats.includes(v) ? [] : [v])} val={newCat} setVal={setNewCat} onAdd={() => handleQuickAdd("categories", newCat, setNewCat)} onDelete={(id: string) => handleDeleteItem("categories", id)} />
+            <SidebarSection label="Brand" icon={<Factory className="w-3 h-3"/>} items={brands} selected={selectedBrands} onCheck={(v: string) => setSelectedBrands(selectedBrands.includes(v) ? [] : [v])} val={newBrand} setVal={setNewBrand} onAdd={() => handleQuickAdd("brands", newBrand, setNewBrand)} onDelete={(id: string) => handleDeleteItem("brands", id)} />
+
+            <div className="pt-4 border-t border-slate-100 space-y-6">
+              <Label className="text-[9px] font-black uppercase text-blue-600 flex items-center gap-1"><Settings2 size={12}/> Custom Sections</Label>
+              {customSections.map((sec) => (
+                <div key={sec.id} className="relative p-3 rounded-2xl bg-slate-50/50 border border-slate-100 group">
+                  <SidebarSection 
+                    label={sec.title} icon={<Plus className="w-3 h-3 text-blue-500"/>} items={sec.items} selected={sec.selected} 
+                    onCheck={(v: string) => {
+                      setCustomSections(prev => prev.map(s => s.id === sec.id ? {...s, selected: s.selected.includes(v) ? [] : [v]} : s));
+                    }}
+                    val={""} setVal={() => {}} onAdd={() => {}} 
+                    onDelete={async (itemId: string) => {
+                      const sRef = doc(db, "custom_sections", sec.id);
+                      await updateDoc(sRef, { items: sec.items.filter(i => i.id !== itemId) });
+                    }} 
+                    customAddLogic={(val: string) => handleAddChoiceToCustom(sec.id, val)}
+                    isDynamic={true} onDeleteSection={() => handleDeleteItem("custom_sections", sec.id)}
+                  />
+                </div>
+              ))}
+              {!isAddingNewSection ? (
+                <Button variant="outline" className="w-full h-10 border-dashed border-2 rounded-xl text-[10px] font-black text-slate-400 hover:text-blue-500" onClick={() => setIsAddingNewSection(true)}>+ NEW SECTION</Button>
+              ) : (
+                <div className="p-3 bg-white rounded-2xl border-2 border-blue-100 shadow-lg animate-in zoom-in duration-200">
+                  <Input placeholder="SECTION TITLE..." className="h-8 text-[10px] font-black rounded-lg border-none bg-slate-50 uppercase" value={newSectionTitle} onChange={e => setNewSectionTitle(e.target.value)} onKeyDown={e => e.key === 'Enter' && handleCreateNewSection()}/>
+                  <div className="flex gap-2 mt-2"><Button onClick={handleCreateNewSection} className="flex-1 h-7 bg-blue-600 rounded-lg text-[10px] font-bold text-white">SAVE</Button><Button onClick={() => setIsAddingNewSection(false)} variant="ghost" className="h-7 rounded-lg text-[10px] font-bold">CANCEL</Button></div>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        <Button disabled={isPublishing} onClick={handlePublish} className="w-full bg-[#d11a2a] hover:bg-[#b01622] h-16 rounded-2xl font-black uppercase tracking-[0.2em] text-white shadow-xl shadow-red-200 transition-all active:scale-95">
+          {isPublishing ? <><Loader2 className="animate-spin mr-2"/> Publishing...</> : "Publish Product"}
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function SidebarSection({ label, icon, items, selected, onCheck, val, setVal, onAdd, onDelete, customAddLogic, isDynamic, onDeleteSection }: SidebarSectionProps) {
+  const [localVal, setLocalVal] = useState("");
+  const handleInnerAdd = () => { if (isDynamic && customAddLogic) { customAddLogic(localVal); setLocalVal(""); } else { onAdd(); } };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex justify-between items-center">
+        <Label className="text-[9px] font-black uppercase text-blue-600 flex items-center gap-1">{icon} {label}</Label>
+        {isDynamic && (
+          <AlertDialog>
+            <AlertDialogTrigger asChild><button className="text-slate-300 hover:text-red-500 transition-colors"><Trash2 className="w-3 h-3"/></button></AlertDialogTrigger>
+            <AlertDialogContent className="rounded-3xl border-none">
+              <AlertDialogHeader>
+                <AlertDialogTitle className="font-black uppercase italic">Delete Section?</AlertDialogTitle>
+                <AlertDialogDescription className="text-xs">This will permanently delete the <b>{label}</b> section from the database.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter><AlertDialogCancel className="rounded-xl bg-slate-100 text-[10px] uppercase font-bold">Cancel</AlertDialogCancel><AlertDialogAction onClick={onDeleteSection} className="rounded-xl bg-red-600 text-[10px] uppercase font-bold">Delete Section</AlertDialogAction></AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        )}
+      </div>
+      <div className="flex gap-1">
+        <Input className="h-7 text-[10px] bg-white rounded-lg" placeholder={`Add ${label}...`} value={isDynamic ? localVal : val} onChange={(e) => isDynamic ? setLocalVal(e.target.value) : setVal(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && handleInnerAdd()} />
+        <Button size="sm" className="h-7 w-7 p-0 bg-blue-500 hover:bg-blue-600 rounded-lg shadow-sm" onClick={handleInnerAdd}><Plus className="w-4 h-4 text-white"/></Button>
+      </div>
+      <div className="space-y-1 max-h-40 overflow-y-auto pr-2 border-l-2 border-slate-100 pl-2 custom-scrollbar">
+        {items.map((item) => (
+          <div key={item.id} className={`flex items-center justify-between group p-1.5 rounded-lg transition-all ${selected.includes(item.name) ? 'bg-blue-50 ring-1 ring-blue-100' : 'hover:bg-slate-50'}`}>
+            <div className="flex items-center space-x-2">
+              <Checkbox id={item.id} checked={selected.includes(item.name)} onCheckedChange={() => onCheck(item.name)} />
+              <Label htmlFor={item.id} className={`text-[11px] font-bold cursor-pointer ${selected.includes(item.name) ? 'text-blue-700' : 'text-slate-600'}`}>{item.name}</Label>
+            </div>
+            <AlertDialog>
+              <AlertDialogTrigger asChild><button className="opacity-0 group-hover:opacity-100 transition-opacity p-1"><X className="w-3 h-3 text-red-300 hover:text-red-500" /></button></AlertDialogTrigger>
+              <AlertDialogContent className="rounded-3xl border-none">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="font-black uppercase italic text-xl">Delete Item?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-xs font-medium">Permanently delete <b>{item.name}</b> from the {label} list?</AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter className="gap-2"><AlertDialogCancel className="rounded-xl bg-slate-100 border-none font-bold text-[10px] uppercase">Cancel</AlertDialogCancel><AlertDialogAction onClick={() => onDelete(item.id)} className="rounded-xl bg-red-600 hover:bg-red-700 font-bold text-[10px] uppercase">Delete</AlertDialogAction></AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        ))}
+      </div>
+    </div>
   )
 }
