@@ -1,6 +1,7 @@
 "use client"
 
 import type React from "react"
+import { PageWrapper } from "@/components/sidebar/page-wrapper"
 import { useState, useEffect } from "react"
 import { db } from "@/lib/firebase"
 import {
@@ -14,10 +15,22 @@ import {
   updateDoc,
   serverTimestamp,
 } from "firebase/firestore"
-import { Plus, Pencil, Trash2, Loader2, ImagePlus, X, AlignLeft, Layout, Save, FileText } from "lucide-react"
+import {
+  Plus,
+  Pencil,
+  Trash2,
+  Loader2,
+  ImagePlus,
+  X,
+  AlignLeft,
+  Layout,
+  Save,
+  FileText,
+  Clock,
+  CalendarClock
+} from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { uploadToCloudinary } from "@/lib/cloudinary"
-import { PageWrapper } from "@/components/sidebar/page-wrapper"
 
 type Section = {
   id: string
@@ -37,10 +50,14 @@ const BlogManagerContent = () => {
   const [mainTitle, setMainTitle] = useState("")
   const [category, setCategory] = useState("Industry News")
   const [status, setStatus] = useState("Published")
-  const [website, setWebsite] = useState("")
+  const [website, setWebsite] = useState("Disruptive")
   const [mainImage, setMainImage] = useState<File | null>(null)
   const [mainImagePrev, setMainImagePrev] = useState<string | null>(null)
   const [sections, setSections] = useState<Section[]>([])
+  
+  // Schedule State
+  const [publishDate, setPublishDate] = useState<string>("")
+  const [publishTime, setPublishTime] = useState<string>("")
 
   useEffect(() => {
     const q = query(collection(db, "blogs"), orderBy("createdAt", "desc"))
@@ -90,10 +107,33 @@ const BlogManagerContent = () => {
         }),
       )
 
+      // --- SCHEDULE LOGIC START ---
+      let scheduleData = {}
+      
+      if (publishDate) {
+        // If date is set, default time to 00:00 if not provided
+        const timeToUse = publishTime || "00:00"
+        const combinedDate = new Date(`${publishDate}T${timeToUse}`)
+        
+        scheduleData = {
+          scheduledPublishDate: combinedDate.toISOString(),
+          isScheduled: true,
+          // Optional: Auto-set status to Scheduled if the date is in the future
+          status: combinedDate > new Date() ? "Scheduled" : status
+        }
+      } else {
+        // Explicitly set to null to remove schedule if user cleared the inputs
+        scheduleData = {
+          scheduledPublishDate: null,
+          isScheduled: false,
+          status: status // revert to selected status
+        }
+      }
+      // --- SCHEDULE LOGIC END ---
+
       const blogData = {
         title: mainTitle,
         category,
-        status,
         website,
         coverImage: finalMainImage,
         sections: updatedSections,
@@ -102,11 +142,13 @@ const BlogManagerContent = () => {
           .toLowerCase()
           .replace(/[^\w ]+/g, "")
           .replace(/ +/g, "-"),
+        ...scheduleData // Spread the calculated schedule data
       }
 
       if (editingId) {
         await updateDoc(doc(db, "blogs", editingId), blogData)
       } else {
+        // For new docs, ensure we set createdAt
         await addDoc(collection(db, "blogs"), { ...blogData, createdAt: serverTimestamp() })
       }
 
@@ -128,6 +170,41 @@ const BlogManagerContent = () => {
     setSections([])
     setStatus("Published")
     setWebsite("Disruptive")
+    setPublishDate("")
+    setPublishTime("")
+  }
+
+  // Helper to handle the Edit Click
+  const handleEditClick = (blog: any) => {
+    setEditingId(blog.id)
+    setMainTitle(blog.title)
+    setWebsite(blog.website)
+    setCategory(blog.category)
+    setStatus(blog.status || "Published")
+    setMainImagePrev(blog.coverImage)
+    setSections(blog.sections || [])
+    
+    // --- POPULATE SCHEDULE INPUTS ---
+    if (blog.scheduledPublishDate) {
+        const dateObj = new Date(blog.scheduledPublishDate)
+        // Convert to YYYY-MM-DD
+        const dateStr = dateObj.toISOString().split('T')[0]
+        // Convert to HH:MM (Local time parsing can be tricky, using simple slice for ISO)
+        // Note: For perfect local time accuracy, you might want to use:
+        // const timeStr = dateObj.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })
+        // But since we saved as ISO, let's extract from ISO for consistency or use local:
+        
+        // Let's use local time string for the input field to match user timezone
+        const offset = dateObj.getTimezoneOffset()
+        const localDate = new Date(dateObj.getTime() - (offset*60*1000))
+        setPublishDate(localDate.toISOString().split('T')[0])
+        setPublishTime(localDate.toISOString().split('T')[1].substring(0,5))
+    } else {
+        setPublishDate("")
+        setPublishTime("")
+    }
+
+    setIsModalOpen(true)
   }
 
   return (
@@ -162,73 +239,89 @@ const BlogManagerContent = () => {
               <th className="px-8 py-6">Story Details</th>
               <th className="px-8 py-6 text-center">Status</th>
               <th className="px-8 py-6 text-center">Website</th>
+              <th className="px-8 py-6 text-center">Schedule</th>
               <th className="px-8 py-6 text-right">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-50">
-            {blogs.map((blog) => (
-              <tr key={blog.id} className="hover:bg-gray-50/30 transition-colors group">
-                <td className="px-8 py-6">
-                  <div className="w-20 h-14 rounded-xl overflow-hidden border border-gray-100 shadow-sm">
-                    <img
-                      src={blog.coverImage || "/placeholder.svg"}
-                      className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
-                    />
-                  </div>
-                </td>
-                <td className="px-8 py-6">
-                  <h4 className="font-black text-gray-900 uppercase text-sm mb-1 truncate max-w-[300px]">
-                    {blog.title}
-                  </h4>
-                  <span className="text-[9px] font-black text-[#d11a2a] uppercase tracking-widest">
-                    {blog.category}
-                  </span>
-                </td>
-                <td className="px-8 py-6 text-center">
-                  <span
-                    className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                      blog.status === "Published" ? "bg-green-50 text-green-500" : "bg-orange-50 text-orange-500"
-                    }`}
-                  >
-                    {blog.status}
-                  </span>
-                </td>
-                <td className="px-8 py-6 text-center">
-                  <span
-                    className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
-                      blog.website === "Disruptive" ? "bg-green-50 text-green-500" : "bg-orange-50 text-orange-500"
-                    }`}
-                  >
-                    {blog.website}
-                  </span>
-                </td>
-                <td className="px-8 py-6 text-right">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      onClick={() => {
-                        setEditingId(blog.id)
-                        setMainTitle(blog.title)
-                        setWebsite(blog.website)
-                        setCategory(blog.category)
-                        setStatus(blog.status || "Published")
-                        setMainImagePrev(blog.coverImage)
-                        setSections(blog.sections || [])
-                        setIsModalOpen(true)
-                      }}
-                      className="p-3 bg-gray-50 text-gray-400 hover:bg-black hover:text-white rounded-xl transition-all"
+            {blogs.map((blog) => {
+                const isScheduledFuture = blog.scheduledPublishDate && new Date(blog.scheduledPublishDate) > new Date();
+
+                return (
+                <tr key={blog.id} className="hover:bg-gray-50/30 transition-colors group">
+                    <td className="px-8 py-6">
+                    <div className="w-20 h-14 rounded-xl overflow-hidden border border-gray-100 shadow-sm">
+                        <img
+                        src={blog.coverImage || "/placeholder.svg"}
+                        className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                        />
+                    </div>
+                    </td>
+                    <td className="px-8 py-6">
+                    <h4 className="font-black text-gray-900 uppercase text-sm mb-1 truncate max-w-[300px]">
+                        {blog.title}
+                    </h4>
+                    <span className="text-[9px] font-black text-[#d11a2a] uppercase tracking-widest">
+                        {blog.category}
+                    </span>
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                    <span
+                        className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                        blog.status === "Published" && !isScheduledFuture
+                            ? "bg-green-50 text-green-500" 
+                            : blog.status === "Draft" 
+                            ? "bg-gray-100 text-gray-500"
+                            : "bg-orange-50 text-orange-500" // Scheduled or other
+                        }`}
                     >
-                      <Pencil size={16} />
-                    </button>
-                    <button
-                      onClick={() => confirm("Delete this story permanently?") && deleteDoc(doc(db, "blogs", blog.id))}
-                      className="p-3 bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+                        {isScheduledFuture ? "Scheduled" : blog.status}
+                    </span>
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                    <span
+                        className={`px-4 py-1.5 rounded-full text-[9px] font-black uppercase tracking-widest ${
+                        blog.website === "Disruptive" ? "bg-green-50 text-green-500" : "bg-orange-50 text-orange-500"
+                        }`}
                     >
-                      <Trash2 size={16} />
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+                        {blog.website}
+                    </span>
+                    </td>
+                    <td className="px-8 py-6 text-center">
+                    {blog.isScheduled && blog.scheduledPublishDate ? (
+                        <div className="flex flex-col items-center justify-center gap-1">
+                            <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${isScheduledFuture ? "bg-blue-50" : "bg-gray-50"}`}>
+                                <CalendarClock size={12} className={isScheduledFuture ? "text-blue-500" : "text-gray-400"} />
+                                <span className={`text-[9px] font-black uppercase tracking-widest ${isScheduledFuture ? "text-blue-500" : "text-gray-400"}`}>
+                                    {new Date(blog.scheduledPublishDate).toLocaleDateString()}
+                                </span>
+                            </div>
+                            <span className="text-[8px] font-bold text-gray-300">
+                                {new Date(blog.scheduledPublishDate).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                        </div>
+                    ) : (
+                        <span className="text-[9px] font-bold text-gray-400 opacity-20">—</span>
+                    )}
+                    </td>
+                    <td className="px-8 py-6 text-right">
+                    <div className="flex justify-end gap-2">
+                        <button
+                        onClick={() => handleEditClick(blog)}
+                        className="p-3 bg-gray-50 text-gray-400 hover:bg-black hover:text-white rounded-xl transition-all"
+                        >
+                        <Pencil size={16} />
+                        </button>
+                        <button
+                        onClick={() => confirm("Delete this story permanently?") && deleteDoc(doc(db, "blogs", blog.id))}
+                        className="p-3 bg-gray-50 text-gray-400 hover:bg-red-50 hover:text-red-500 rounded-xl transition-all"
+                        >
+                        <Trash2 size={16} />
+                        </button>
+                    </div>
+                    </td>
+                </tr>
+            )})}
           </tbody>
         </table>
       </div>
@@ -277,7 +370,7 @@ const BlogManagerContent = () => {
                       <Loader2 className="animate-spin" size={16} />
                     ) : (
                       <>
-                        <Save size={16} /> Publish Story
+                        <Save size={16} /> {publishDate ? "Schedule Publish" : "Publish Story"}
                       </>
                     )}
                   </button>
@@ -323,10 +416,12 @@ const BlogManagerContent = () => {
                       >
                         <option>Published</option>
                         <option>Draft</option>
+                        {/* Status will automatically be treated as scheduled if date is set */}
+                        <option>Scheduled</option>
                       </select>
                     </div>
 
-                      <div className="space-y-2">
+                    <div className="space-y-2">
                       <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest block">
                         Website
                       </span>
@@ -336,9 +431,35 @@ const BlogManagerContent = () => {
                         className="font-black text-xs uppercase outline-none bg-transparent cursor-pointer text-gray-900 border-b-2 border-transparent focus:border-[#d11a2a] pb-1 transition-all"
                       >
                         <option>Disruptive</option>
-                        <option>Ecoshift</option>
+                        <option>Ecoshift Corporation</option>
                         <option>VAH</option>
                       </select>
+                    </div>
+
+                    {/* UPDATED SCHEDULE INPUTS */}
+                    <div className="space-y-2">
+                      <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest block flex items-center gap-2">
+                        <CalendarClock size={12}/> Schedule Date
+                      </span>
+                      <input
+                        type="date"
+                        value={publishDate}
+                        onChange={(e) => setPublishDate(e.target.value)}
+                        className="font-black text-xs uppercase outline-none bg-transparent cursor-pointer text-gray-900 border-b-2 border-transparent focus:border-[#d11a2a] pb-1 transition-all"
+                      />
+                    </div>
+
+                    <div className="space-y-2">
+                      <span className="text-[9px] font-black uppercase text-gray-400 tracking-widest block flex items-center gap-2">
+                         <Clock size={12}/> Schedule Time
+                      </span>
+                      <input
+                        type="time"
+                        value={publishTime}
+                        onChange={(e) => setPublishTime(e.target.value)}
+                        disabled={!publishDate} // Disable time if no date selected
+                        className="font-black text-xs uppercase outline-none bg-transparent cursor-pointer text-gray-900 border-b-2 border-transparent focus:border-[#d11a2a] pb-1 transition-all disabled:opacity-30"
+                      />
                     </div>
 
                     <label className="ml-auto flex items-center gap-3 cursor-pointer bg-gray-900 text-white px-6 py-3 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-[#d11a2a] transition-all shadow-lg">

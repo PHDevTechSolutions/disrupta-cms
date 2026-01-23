@@ -75,6 +75,10 @@ const data = {
           title: "Careers Manager",
           url: "/managers/careers-manager",
         },
+        {
+          title: "Solutions Manager",
+          url: "/managers/solutions-manager",
+        },
       ],
     },
   ],
