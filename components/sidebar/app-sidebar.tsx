@@ -49,12 +49,8 @@ const data = {
       icon: Package,
       items: [
         {
-          title: "All Products",
+          title: "Products",
           url: "/products/all-products",
-        },
-        {
-          title: "Add Product",
-          url: "/products/add-product",
         },
         {
           title: "Orders",
@@ -78,6 +74,10 @@ const data = {
         {
           title: "Solutions Manager",
           url: "/managers/solutions-manager",
+        },
+        {
+          title: "Company Manager",
+          url: "/managers/company-manager",
         },
       ],
     },

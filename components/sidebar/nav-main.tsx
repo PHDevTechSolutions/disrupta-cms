@@ -22,23 +22,28 @@ import {
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar"
 
-type NavItem = {
+/* ---------------- TYPES ---------------- */
+
+type NavSubItem = {
   title: string
   url: string
+}
+
+type NavItem = {
+  title: string
   icon?: LucideIcon
   isActive?: boolean
-  items?: {
-    title: string
-    url: string
-  }[]
+  items?: NavSubItem[]
 }
+
+/* ---------------- COMPONENT ---------------- */
 
 export function NavMain({
   items,
   onNavigate,
 }: {
   items: NavItem[]
-  onNavigate: (view: string) => void
+  onNavigate: (url: string) => void
 }) {
   return (
     <SidebarGroup>
@@ -49,8 +54,7 @@ export function NavMain({
         <SidebarMenu>
           <SidebarMenuItem className="flex items-center gap-2">
             <SidebarMenuButton
-              tooltip="View Dashboard"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/90 min-w-8 duration-200"
+              className="bg-primary text-primary-foreground hover:bg-primary/90 active:bg-primary/90 min-w-8"
               onClick={() => onNavigate("/dashboard")}
             >
               <IconCirclePlusFilled />
@@ -60,8 +64,8 @@ export function NavMain({
             <Button
               size="icon"
               variant="outline"
-              className="size-8 group-data-[collapsible=icon]:opacity-0"
-              onClick={() => onNavigate("Inbox")}
+              className="size-8 bg-transparent"
+              onClick={() => onNavigate("/inbox")}
             >
               <IconMail />
               <span className="sr-only">Inbox</span>
@@ -74,15 +78,17 @@ export function NavMain({
           {items.map((item) => (
             <Collapsible
               key={item.title}
-              asChild
               defaultOpen={item.isActive}
               className="group/collapsible"
             >
               <SidebarMenuItem>
+                {/* ✅ ENTIRE ROW IS THE TRIGGER */}
                 <CollapsibleTrigger asChild>
                   <SidebarMenuButton tooltip={item.title}>
                     {item.icon && <item.icon />}
                     <span>{item.title}</span>
+
+                    {/* Chevron is VISUAL ONLY, no separate interaction */}
                     <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                   </SidebarMenuButton>
                 </CollapsibleTrigger>
@@ -93,8 +99,9 @@ export function NavMain({
                       <SidebarMenuSubItem key={subItem.title}>
                         <SidebarMenuSubButton asChild>
                           <button
+                            type="button"
                             className="w-full text-left"
-                            onClick={() => onNavigate(subItem.title)}
+                            onClick={() => onNavigate(subItem.url)}
                           >
                             {subItem.title}
                           </button>
