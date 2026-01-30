@@ -11,6 +11,9 @@ import {
   Package,
   ChevronLeft,
   ChevronRight,
+  Upload,
+  X,
+  AlertTriangle,
 } from "lucide-react";
 
 // UI Components
@@ -24,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +59,7 @@ import { toast } from "sonner";
 
 // Components
 import AddProductForm from "@/components/products/add-product-form";
+import { BulkUploadSection } from "@/components/products/bulk-upload";
 import { PageWrapper } from "@/components/sidebar/page-wrapper";
 
 export default function AllProducts() {
@@ -66,13 +71,108 @@ export default function AllProducts() {
   const [brandFilter, setBrandFilter] = useState("All Brands");
   const [websiteFilter, setWebsiteFilter] = useState("All Websites");
 
-  // Pagination States
+  // --- PAGINATION STATES ---
+  // Default set to 10 as requested
   const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 8;
+  const [itemsPerPage, setItemsPerPage] = useState(10);
+  // Separate state for the input field to allow clearing/typing
+  const [itemsPerPageInput, setItemsPerPageInput] = useState("10");
 
   // Modal States
   const [selectedProduct, setSelectedProduct] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isBulkUploadOpen, setIsBulkUploadOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
+  // --- PAGINATION HANDLERS (UPDATED UX) ---
+  const handleItemsPerPageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value;
+    setItemsPerPageInput(val); // Always update the UI input immediately
+
+    // Only update the logic if it's a valid number
+    if (val !== "") {
+      const num = parseInt(val, 10);
+      if (!isNaN(num) && num > 0) {
+        setItemsPerPage(num);
+        setCurrentPage(1);
+      }
+    }
+  };
+
+  const handleItemsPerPageBlur = () => {
+    // If user leaves it empty or invalid, snap back to the current valid setting
+    if (itemsPerPageInput === "" || parseInt(itemsPerPageInput) <= 0) {
+      setItemsPerPageInput(itemsPerPage.toString());
+    }
+  };
+
+  // --- SELECTION HANDLERS ---
+  const toggleSelectProduct = (productId: string, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    const newSelected = new Set(selectedIds);
+    if (newSelected.has(productId)) {
+      newSelected.delete(productId);
+    } else {
+      newSelected.add(productId);
+    }
+    setSelectedIds(newSelected);
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === paginatedProducts.length) {
+      setSelectedIds(new Set());
+    } else {
+      const allIds = new Set(paginatedProducts.map((p) => p.id));
+      setSelectedIds(allIds);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    setIsDeleting(true);
+    try {
+      const deletePromises = Array.from(selectedIds).map((id) =>
+        deleteDoc(doc(db, "products", id)),
+      );
+      await Promise.all(deletePromises);
+      setSelectedIds(new Set());
+      setShowDeleteConfirm(false);
+      toast.success(`Deleted ${selectedIds.size} product(s)`);
+    } catch (error) {
+      console.error("Bulk delete error:", error);
+      toast.error("Failed to delete products");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  // --- PAGINATION HELPERS ---
+  const getPaginationPages = () => {
+    const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
+    const maxButtons = 5;
+
+    if (totalPages <= maxButtons) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    const pages: number[] = [];
+    const leftSide = Math.floor(maxButtons / 2);
+    const rightSide = maxButtons - leftSide - 1;
+
+    let startPage = Math.max(1, currentPage - leftSide);
+    let endPage = Math.min(totalPages, startPage + maxButtons - 1);
+
+    if (endPage - startPage < maxButtons - 1) {
+      startPage = Math.max(1, endPage - maxButtons + 1);
+    }
+
+    for (let i = startPage; i <= endPage; i++) {
+      pages.push(i);
+    }
+
+    return pages;
+  };
 
   // --- 1. FETCH DATA ---
   useEffect(() => {
@@ -91,7 +191,7 @@ export default function AllProducts() {
         console.error("Fetch error:", error);
         toast.error("Failed to load products");
         setLoading(false);
-      }
+      },
     );
     return () => unsubscribe();
   }, []);
@@ -120,7 +220,7 @@ export default function AllProducts() {
   const paginatedProducts = useMemo(() => {
     const startIndex = (currentPage - 1) * itemsPerPage;
     return filteredProducts.slice(startIndex, startIndex + itemsPerPage);
-  }, [filteredProducts, currentPage]);
+  }, [filteredProducts, currentPage, itemsPerPage]);
 
   const uniqueBrands = useMemo(() => {
     const brandsSet = new Set<string>();
@@ -178,14 +278,30 @@ export default function AllProducts() {
                 Manage and update your products
               </p>
             </div>
-            <ExpandableScreenTrigger>
+            <div className="flex gap-3">
+              <ExpandableScreenTrigger>
+                <Button
+                  onClick={handleAddNewClick}
+                  className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-6 font-black uppercase text-[10px] tracking-widest h-12 shadow-lg shadow-blue-100 transition-all active:scale-95"
+                >
+                  <PlusCircle className="mr-2 w-4 h-4" /> Add Product
+                </Button>
+              </ExpandableScreenTrigger>
               <Button
-                onClick={handleAddNewClick}
-                className="bg-blue-600 hover:bg-blue-700 text-white rounded-2xl px-6 font-black uppercase text-[10px] tracking-widest h-12 shadow-lg shadow-blue-100 transition-all active:scale-95"
+                onClick={() => setIsBulkUploadOpen(true)}
+                className="bg-green-600 hover:bg-green-700 text-white rounded-2xl px-6 font-black uppercase text-[10px] tracking-widest h-12 shadow-lg shadow-green-100 transition-all active:scale-95"
               >
-                <PlusCircle className="mr-2 w-4 h-4" /> Add Product
+                <Upload className="mr-2 w-4 h-4" /> Bulk Upload
               </Button>
-            </ExpandableScreenTrigger>
+              {selectedIds.size > 0 && (
+                <Button
+                  onClick={() => setShowDeleteConfirm(true)}
+                  className="bg-red-600 hover:bg-red-700 text-white rounded-2xl px-6 font-black uppercase text-[10px] tracking-widest h-12 shadow-lg shadow-red-100 transition-all active:scale-95"
+                >
+                  <Trash2 className="mr-2 w-4 h-4" /> Delete {selectedIds.size}
+                </Button>
+              )}
+            </div>
           </div>
 
           {/* FILTERS */}
@@ -235,7 +351,17 @@ export default function AllProducts() {
             <Table>
               <TableHeader className="bg-gray-50/50">
                 <TableRow className="hover:bg-transparent border-none">
-                  <TableHead className="w-[80px] pl-6 py-4">Image</TableHead>
+                  <TableHead className="w-12 pl-6 py-4">
+                    <Checkbox
+                      checked={
+                        selectedIds.size === paginatedProducts.length &&
+                        paginatedProducts.length > 0
+                      }
+                      onCheckedChange={toggleSelectAll}
+                      className="rounded-md"
+                    />
+                  </TableHead>
+                  <TableHead className="w-[80px] pl-2 py-4">Image</TableHead>
                   <TableHead className="text-[10px] font-black uppercase tracking-widest">
                     Product Info
                   </TableHead>
@@ -274,11 +400,27 @@ export default function AllProducts() {
                   paginatedProducts.map((product) => (
                     <TableRow
                       key={product.id}
-                      className="group hover:bg-blue-50/30 transition-all cursor-pointer border-b border-gray-50"
+                      className={`group hover:bg-blue-50/30 transition-all border-b border-gray-50 ${
+                        selectedIds.has(product.id) ? "bg-blue-50/50" : ""
+                      }`}
                       onClick={() => handleEditClick(product)}
                     >
+                      {/* CHECKBOX */}
+                      <TableCell
+                        className="pl-6 py-4"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <Checkbox
+                          checked={selectedIds.has(product.id)}
+                          onCheckedChange={(e) =>
+                            toggleSelectProduct(product.id)
+                          }
+                          className="rounded-md"
+                        />
+                      </TableCell>
+
                       {/* MAIN IMAGE */}
-                      <TableCell className="pl-6 py-4">
+                      <TableCell className="pl-2 py-4">
                         <div className="w-14 h-14 bg-white rounded-2xl p-1 border border-gray-100 shadow-sm overflow-hidden group-hover:scale-105 transition-transform">
                           <img
                             src={product.mainImage || "/placeholder.svg"}
@@ -373,46 +515,66 @@ export default function AllProducts() {
             </Table>
           </div>
 
-          {/* PAGINATION */}
-          {!loading && totalPages > 1 && (
-            <div className="flex justify-center items-center gap-2 mt-8 mb-4">
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev) => prev - 1)}
-                className="rounded-xl h-9 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600"
-              >
-                <ChevronLeft size={16} className="mr-1" /> Prev
-              </Button>
-
-              <div className="flex gap-1.5">
-                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
-                  (pageNum) => (
-                    <button
-                      key={pageNum}
-                      onClick={() => setCurrentPage(pageNum)}
-                      className={`h-9 w-9 rounded-xl text-[11px] font-black transition-all transform active:scale-90 ${
-                        currentPage === pageNum
-                          ? "bg-blue-600 text-white shadow-xl shadow-blue-200 scale-110"
-                          : "bg-white text-blue-400 border border-slate-100 hover:border-blue-200 hover:bg-blue-50"
-                      }`}
-                    >
-                      {pageNum}
-                    </button>
-                  )
-                )}
+          {/* PAGINATION AND ROWS PER PAGE */}
+          {!loading && (
+            <div className="mt-8 mb-4 flex flex-col sm:flex-row items-center justify-between gap-4">
+              {/* ROWS PER PAGE SELECTOR */}
+              <div className="flex items-center gap-2 sm:gap-3">
+                <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                  Rows per page:
+                </span>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={itemsPerPageInput}
+                  onChange={handleItemsPerPageChange}
+                  onBlur={handleItemsPerPageBlur}
+                  placeholder="10"
+                  className="h-9 w-16 px-3 rounded-xl border border-slate-200 bg-white text-[10px] font-black uppercase text-slate-900 focus:outline-none focus:border-blue-600 transition-colors text-center"
+                />
               </div>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((prev) => prev + 1)}
-                className="rounded-xl h-9 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600"
-              >
-                Next <ChevronRight size={16} className="ml-1" />
-              </Button>
+              {/* PAGINATION BUTTONS */}
+              {totalPages > 1 && (
+                <div className="flex justify-center items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={currentPage === 1}
+                    onClick={() => setCurrentPage((prev) => prev - 1)}
+                    className="rounded-xl h-9 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600"
+                  >
+                    <ChevronLeft size={16} className="mr-1" /> Prev
+                  </Button>
+
+                  <div className="flex gap-1.5">
+                    {getPaginationPages().map((pageNum) => (
+                      <button
+                        key={pageNum}
+                        onClick={() => setCurrentPage(pageNum)}
+                        className={`h-9 w-9 rounded-xl text-[11px] font-black transition-all transform active:scale-90 ${
+                          currentPage === pageNum
+                            ? "bg-blue-600 text-white shadow-xl shadow-blue-200 scale-110"
+                            : "bg-white text-blue-400 border border-slate-100 hover:border-blue-200 hover:bg-blue-50"
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    ))}
+                  </div>
+
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={currentPage === totalPages}
+                    onClick={() => setCurrentPage((prev) => prev + 1)}
+                    className="rounded-xl h-9 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600"
+                  >
+                    Next <ChevronRight size={16} className="ml-1" />
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -442,6 +604,96 @@ export default function AllProducts() {
             />
           </div>
         </ExpandableScreenContent>
+
+        {/* BULK UPLOAD MODAL */}
+        {isBulkUploadOpen && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full max-h-[90vh] overflow-auto">
+              {/* Modal Header */}
+              <div className="sticky top-0 bg-white border-b border-slate-200 p-6 flex items-center justify-between">
+                <div>
+                  <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900">
+                    Bulk Upload Products
+                  </h3>
+                  <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">
+                    Upload multiple products via CSV or Excel
+                  </p>
+                </div>
+                <button
+                  onClick={() => setIsBulkUploadOpen(false)}
+                  className="p-2 hover:bg-slate-100 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-slate-400 hover:text-slate-600" />
+                </button>
+              </div>
+
+              {/* Modal Content */}
+              <div className="p-6 sm:p-10">
+                <BulkUploadSection
+                  onUploadComplete={() => {
+                    setIsBulkUploadOpen(false);
+                    toast.success("Bulk upload completed!");
+                  }}
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* BULK DELETE CONFIRMATION MODAL */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 z-50 bg-black/50 flex items-center justify-center p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full overflow-hidden">
+              {/* Modal Content */}
+              <div className="p-8">
+                <div className="flex items-center justify-center mb-6">
+                  <div className="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center">
+                    <AlertTriangle className="w-6 h-6 text-red-600" />
+                  </div>
+                </div>
+
+                <h3 className="text-2xl font-black uppercase tracking-tighter text-slate-900 text-center mb-2">
+                  Delete Products?
+                </h3>
+
+                <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center mb-6">
+                  You are about to permanently delete{" "}
+                  <span className="text-red-600 font-black">
+                    {selectedIds.size}
+                  </span>{" "}
+                  product{selectedIds.size !== 1 ? "s" : ""}. This action cannot
+                  be undone.
+                </p>
+
+                <div className="flex gap-3">
+                  <Button
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="flex-1 rounded-2xl border-2 border-slate-200 bg-white text-slate-900 font-black text-[10px] uppercase tracking-widest h-12 hover:bg-slate-50"
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    onClick={handleBulkDelete}
+                    disabled={isDeleting}
+                    className="flex-1 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-[10px] uppercase tracking-widest h-12 shadow-lg shadow-red-100 active:scale-95 transition-all disabled:opacity-50"
+                  >
+                    {isDeleting ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin mr-2" />
+                        Deleting...
+                      </>
+                    ) : (
+                      <>
+                        <Trash2 className="w-4 h-4 mr-2" />
+                        Delete
+                      </>
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </ExpandableScreen>
     </PageWrapper>
   );
