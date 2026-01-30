@@ -1,184 +1,237 @@
-"use client";
+"use client"
 
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { motion, useReducedMotion } from "framer-motion";
-import { Chrome } from "lucide-react";
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-
-import { auth, db } from "@/lib/firebase";
+import * as React from "react"
+import { useState } from "react"
+import { useRouter } from "next/navigation" // Added useRouter
+import { getDoc, doc } from "firebase/firestore"
+import { auth, db } from "@/lib/firebase"
 import {
-  GoogleAuthProvider,
-  signInWithPopup,
   signInWithEmailAndPassword,
+  signInWithPopup,
+  GoogleAuthProvider,
   signOut,
-} from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+} from "firebase/auth"
+import {
+  Lock,
+  Mail,
+  Loader2,
+  Eye,
+  EyeOff,
+  ShieldCheck,
+} from "lucide-react"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card"
+import { toast } from "sonner"
+import Link from "next/link"
 
-const socialProviders = [{ name: "Google", icon: Chrome }];
+export default function LoginPage() {
+  const router = useRouter() // Initialize router
+  const [email, setEmail] = useState("")
+  const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
+  const [isLoading, setIsLoading] = useState(false)
 
-export default function LoginForm() {
-  const shouldReduceMotion = useReducedMotion();
-  const router = useRouter();
+  /* =========================
+      SHARED CMS AUTH CHECK
+     ========================= */
+  const authorizeCMSUser = async (user: any, loginToast: any) => {
+    const userDoc = await getDoc(doc(db, "adminaccount", user.uid))
 
-  const [loading, setLoading] = useState(false);
-  const [rememberMe, setRememberMe] = useState(false);
-
-  // GOOGLE LOGIN
-  const handleGoogleSignIn = async () => {
-    try {
-      setLoading(true);
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      // Check Firestore
-      const userRef = doc(db, "users", user.uid);
-      const userSnap = await getDoc(userRef);
-
-      if (!userSnap.exists()) {
-        await signOut(auth);
-        return alert("This Google account is not registered. Please sign up first.");
-      }
-
-      router.push("/products/all-products");
-    } catch (err: any) {
-      alert(err.message || "Google sign-in failed");
-    } finally {
-      setLoading(false);
+    if (!userDoc.exists()) {
+      throw new Error("user_not_registered")
     }
-  };
 
-  // EMAIL/PASSWORD LOGIN
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setLoading(true);
+    const userData = userDoc.data()
+    const role = String(userData.role || "").toLowerCase().trim()
+    const status = String(userData.status || "").toLowerCase().trim()
 
-    const formData = new FormData(event.currentTarget);
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
+    if (status !== "active") {
+      throw new Error("account_disabled")
+    }
+
+    const validRoles = ["admin", "warehouse", "staff", "inventory", "hr"]
+    if (!validRoles.includes(role)) {
+      throw new Error("unauthorized_role")
+    }
+
+    // Set Session Tracking
+    document.cookie = "admin_session=true; path=/; max-age=3600; SameSite=Strict"
+    localStorage.setItem(
+      "disruptive_admin_user",
+      JSON.stringify({
+        uid: user.uid,
+        name: userData.fullName || userData.name || "Internal Staff",
+        email: user.email,
+        role,
+        accessLevel: userData.accessLevel || (role === "admin" ? "full" : "staff"),
+      })
+    )
+
+    toast.success(`Access Authorized: ${role.toUpperCase()}`, {
+      id: loginToast,
+    })
+
+    // Use router.push for a faster, SPA-style transition
+    router.push("/products/all-products")
+  }
+
+  /* =========================
+      EMAIL / PASSWORD LOGIN
+     ========================= */
+  const handleLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!email || !password) return toast.error("Please fill in all fields")
+
+    setIsLoading(true)
+    const loginToast = toast.loading("Checking Internal Access...")
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/products/all-products");
-    } catch (err: any) {
-      if (err.code === "auth/user-not-found") {
-        alert("No account found with this email. Please register first.");
-      } else if (err.code === "auth/wrong-password") {
-        alert("Incorrect password. Please try again.");
-      } else {
-        alert("Login failed. Please try again.");
-      }
+      const cred = await signInWithEmailAndPassword(auth, email, password)
+      await authorizeCMSUser(cred.user, loginToast)
+    } catch (error: any) {
+      handleAuthError(error, loginToast)
     } finally {
-      setLoading(false);
+      setIsLoading(false)
     }
-  };
+  }
+
+  /* =========================
+      GOOGLE LOGIN (STRICT)
+     ========================= */
+  const handleGoogleLogin = async () => {
+    setIsLoading(true)
+    const loginToast = toast.loading("Waiting for Google authentication...")
+
+    try {
+      const provider = new GoogleAuthProvider()
+      provider.setCustomParameters({ prompt: "select_account" })
+      const result = await signInWithPopup(auth, provider)
+      await authorizeCMSUser(result.user, loginToast)
+    } catch (error: any) {
+      handleAuthError(error, loginToast)
+    } finally {
+      setIsLoading(false)
+    }
+  }
+
+  /* =========================
+      ERROR HANDLER HELPER
+     ========================= */
+  const handleAuthError = async (error: any, loginToast: string | number) => {
+    await signOut(auth)
+    document.cookie = "admin_session=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT"
+    localStorage.removeItem("disruptive_admin_user")
+
+    if (error?.code === "auth/popup-closed-by-user") {
+      toast.dismiss(loginToast)
+      return
+    }
+
+    const messages: Record<string, string> = {
+      user_not_registered: "This account is not registered. Please sign up first.",
+      unauthorized_role: "Access denied: Invalid role.",
+      account_disabled: "Account is disabled.",
+      "auth/invalid-credential": "Invalid email or password.",
+    }
+
+    toast.error(messages[error.message] || messages[error.code] || "Authentication failed.", {
+      id: loginToast,
+    })
+  }
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 16 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{
-        duration: 0.45,
-        ease: shouldReduceMotion ? "linear" : [0.16, 1, 0.3, 1],
-      }}
-      className="group w-full max-w-lg rounded-3xl overflow-hidden border border-border/60 bg-card/85 p-8 backdrop-blur-xl sm:p-10 relative"
-    >
-      {/* HEADER */}
-      <div className="mb-8 space-y-2 text-center">
-        <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-border/60 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.28em] text-muted-foreground">
-          Sign In
-        </div>
-        <h1 className="text-2xl font-semibold text-foreground sm:text-3xl">
-          Access your workspace
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          Continue with email and password or sign in with Google.
-        </p>
-      </div>
+    <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 px-4">
+      <Card className="w-full max-w-md border-none shadow-2xl rounded-[32px] bg-white/80 backdrop-blur-xl">
+        <CardHeader className="text-center pt-10">
+          <div className="mx-auto w-14 h-14 bg-[#d11a2a] rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-red-100">
+            <ShieldCheck className="text-white w-7 h-7" />
+          </div>
+          <CardTitle className="text-2xl font-black italic uppercase tracking-tighter text-slate-800">
+            CMS PANEL
+          </CardTitle>
+          <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            Internal System Access
+          </CardDescription>
+        </CardHeader>
 
-      {/* EMAIL/PASSWORD FORM */}
-      <form className="space-y-6" onSubmit={handleSubmit}>
-        <div className="space-y-2">
-          <Label htmlFor="email">Email address</Label>
-          <Input
-            id="email"
-            name="email"
-            type="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-            className="h-11 rounded-2xl border-border/60 bg-background/60 px-4"
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="password">Password</Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            placeholder="Enter your password"
-            autoComplete="current-password"
-            required
-            className="h-11 rounded-2xl border-border/60 bg-background/60 px-4"
-          />
-        </div>
+        <CardContent className="px-8 pb-10 pt-4">
+          <form onSubmit={handleLogin} className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
+                Staff Email
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="pl-11 h-12 rounded-2xl bg-slate-50/50"
+                  placeholder="name@disruptive.com"
+                />
+              </div>
+            </div>
 
-        <div className="flex items-center justify-between text-sm text-muted-foreground">
-          <label className="flex items-center gap-2">
-            <Checkbox
-              id="remember-me"
-              checked={rememberMe}
-              onCheckedChange={(v) => setRememberMe(Boolean(v))}
-            />
-            <span>Remember me</span>
-          </label>
-          <button
-            type="button"
-            className="text-xs font-medium text-primary underline-offset-4 hover:underline"
-          >
-            Forgot password?
-          </button>
-        </div>
+            <div className="space-y-2">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                <Input
+                  type={showPassword ? "text" : "password"}
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  className="pl-11 pr-11 h-12 rounded-2xl bg-slate-50/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
+            </div>
 
-        <Button
-          type="submit"
-          disabled={loading}
-          className="w-full rounded-full bg-primary px-6 py-3 text-primary-foreground shadow-[0_20px_60px_-30px_rgba(79,70,229,0.75)] transition-transform duration-300 hover:-translate-y-1"
-        >
-          {loading ? "Logging in..." : "Continue with Email"}
-        </Button>
-      </form>
+            <Button
+              type="submit"
+              disabled={isLoading}
+              className="w-full bg-[#d11a2a] h-14 rounded-2xl font-black uppercase tracking-widest text-xs transition-transform active:scale-95"
+            >
+              {isLoading ? <Loader2 className="animate-spin" /> : "Authorize Access"}
+            </Button>
 
-      {/* OR DIVIDER */}
-      <div className="my-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-border/70" />
-        <span className="text-xs uppercase tracking-[0.34em] text-muted-foreground">
-          or
-        </span>
-        <div className="h-px flex-1 bg-border/70" />
-      </div>
+            <Button
+              type="button"
+              onClick={handleGoogleLogin}
+              disabled={isLoading}
+              variant="outline"
+              className="w-full h-12 rounded-2xl text-xs font-bold transition-transform active:scale-95"
+            >
+              Continue with Google
+            </Button>
 
-      {/* GOOGLE BUTTON */}
-      <div className="mb-8 flex flex-col gap-4">
-        {socialProviders.map((provider) => (
-          <Button
-            key={provider.name}
-            variant="outline"
-            onClick={handleGoogleSignIn}
-            disabled={loading}
-            className="flex items-center justify-center gap-2 rounded-full border-border/60 bg-card/70 text-sm text-foreground transition-transform duration-300 hover:-translate-y-1 hover:text-primary"
-          >
-            <provider.icon className="h-4 w-4" aria-hidden />
-            <span className="hidden sm:inline">Login With Google</span>
-          </Button>
-        ))}
-      </div>
-    </motion.div>
-  );
+            <p className="text-center text-xs text-slate-500 pt-4">
+              Don’t have access yet?{" "}
+              <Link
+                href="/auth/register"
+                className="font-black text-[#d11a2a] hover:underline"
+              >
+                Sign up
+              </Link>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
 }

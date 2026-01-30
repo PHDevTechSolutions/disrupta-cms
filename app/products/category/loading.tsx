@@ -1,6 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 
-export default function OrdersLoading() {
+export default function CategoryLoading() {
   return (
     <div className="p-4 space-y-8 max-w-7xl mx-auto">
       {/* Header Skeleton */}

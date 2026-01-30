@@ -56,6 +56,18 @@ const data = {
           title: "Orders",
           url: "/products/orders",
         },
+        {
+          title: "Applications Maintenance",
+          url: "/products/applications",
+        },
+        {
+          title: "Specifications Maintenance",
+          url: "/products/specs-maintenance",
+        },
+        {
+          title: "Category Maintenance",
+          url: "/products/category",
+        },
       ],
     },
     {
@@ -66,6 +78,10 @@ const data = {
         {
           title: "Blog Manager",
           url: "/managers/blog-manager",
+        },
+        {
+          title: "Brands Manager",
+          url: "/managers/brands-manager",
         },
         {
           title: "Careers Manager",

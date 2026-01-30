@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { db } from "@/lib/firebase"
 import {
   collection,
@@ -23,6 +23,7 @@ import {
   Save,
   Building2,
   ImagePlus,
+  UploadCloud, // Imported for the dropzone
 } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { uploadToCloudinary } from "@/lib/cloudinary"
@@ -52,10 +53,15 @@ const CompanyManagerContent = () => {
   const [website, setWebsite] = useState("Disruptive")
   const [mainImage, setMainImage] = useState<File | null>(null)
   const [mainImagePrev, setMainImagePrev] = useState<string | null>(null)
+  
+  // Arrays
   const [services, setServices] = useState<string[]>([""])
   const [keyFeatures, setKeyFeatures] = useState<string[]>([""])
-  const [partnersImage, setPartnersImage] = useState<File[]>([])
-  const [partnersImagePrev, setPartnersImagePrev] = useState<string[]>([])
+  
+  // Partner Images State
+  const [partnersImage, setPartnersImage] = useState<(File | null)[]>([]) // Null for existing images, File for new
+  const [partnersImagePrev, setPartnersImagePrev] = useState<string[]>([]) // URLs for display
+  const [isDragging, setIsDragging] = useState(false) // Dropzone state
 
   // --- Real-time Data Sync ---
   useEffect(() => {
@@ -66,13 +72,9 @@ const CompanyManagerContent = () => {
     return () => unsubscribe()
   }, [])
 
-  // --- Array Handlers ---
+  // --- Service & Feature Handlers ---
   const addService = () => setServices([...services, ""])
-
-  const removeService = (index: number) => {
-    setServices(services.filter((_, i) => i !== index))
-  }
-
+  const removeService = (index: number) => setServices(services.filter((_, i) => i !== index))
   const updateService = (index: number, value: string) => {
     const newServices = [...services]
     newServices[index] = value
@@ -80,34 +82,48 @@ const CompanyManagerContent = () => {
   }
 
   const addKeyFeature = () => setKeyFeatures([...keyFeatures, ""])
-
-  const removeKeyFeature = (index: number) => {
-    setKeyFeatures(keyFeatures.filter((_, i) => i !== index))
-  }
-
+  const removeKeyFeature = (index: number) => setKeyFeatures(keyFeatures.filter((_, i) => i !== index))
   const updateKeyFeature = (index: number, value: string) => {
     const newFeatures = [...keyFeatures]
     newFeatures[index] = value
     setKeyFeatures(newFeatures)
   }
 
-  const addPartnerImage = () => {
-    setPartnersImage([...partnersImage, null as any])
-    setPartnersImagePrev([...partnersImagePrev, ""])
+  // --- NEW: Multi-File Dropzone Handlers ---
+
+  const handleFiles = (files: File[]) => {
+    const newFiles = Array.from(files)
+    
+    // Create preview URLs for the new files
+    const newPreviews = newFiles.map(file => URL.createObjectURL(file))
+
+    // Append to existing arrays
+    setPartnersImage(prev => [...prev, ...newFiles])
+    setPartnersImagePrev(prev => [...prev, ...newPreviews])
   }
+
+  const onDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(true)
+  }, [])
+
+  const onDragLeave = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+  }, [])
+
+  const onDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault()
+    setIsDragging(false)
+    if (e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+      handleFiles(Array.from(e.dataTransfer.files))
+      e.dataTransfer.clearData()
+    }
+  }, [])
 
   const removePartnerImage = (index: number) => {
     setPartnersImage(partnersImage.filter((_, i) => i !== index))
     setPartnersImagePrev(partnersImagePrev.filter((_, i) => i !== index))
-  }
-
-  const updatePartnerImage = (index: number, file: File, preview: string) => {
-    const newImages = [...partnersImage]
-    const newPreviews = [...partnersImagePrev]
-    newImages[index] = file
-    newPreviews[index] = preview
-    setPartnersImage(newImages)
-    setPartnersImagePrev(newPreviews)
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,14 +146,21 @@ const CompanyManagerContent = () => {
         finalMainImage = await uploadToCloudinary(mainImage)
       }
 
-      // Upload partner images
+      // Handle Partner Images Upload
+      // Iterate over partnersImagePrev (the visual list) to maintain order
       const finalPartnerImages: string[] = []
-      for (let i = 0; i < partnersImage.length; i++) {
-        if (partnersImage[i]) {
-          const uploadedUrl = await uploadToCloudinary(partnersImage[i])
+      
+      for (let i = 0; i < partnersImagePrev.length; i++) {
+        const file = partnersImage[i]      // The File object (if new)
+        const preview = partnersImagePrev[i] // The URL (if existing)
+
+        if (file) {
+          // It's a new file, upload it
+          const uploadedUrl = await uploadToCloudinary(file)
           finalPartnerImages.push(uploadedUrl)
-        } else if (partnersImagePrev[i]) {
-          finalPartnerImages.push(partnersImagePrev[i])
+        } else {
+          // It's an existing image (file is null), keep the preview URL
+          finalPartnerImages.push(preview)
         }
       }
 
@@ -189,8 +212,13 @@ const CompanyManagerContent = () => {
     setMainImagePrev(company.mainImage || null)
     setServices(company.services && company.services.length > 0 ? company.services : [""])
     setKeyFeatures(company.keyFeatures && company.keyFeatures.length > 0 ? company.keyFeatures : [""])
-    setPartnersImagePrev(company.partnersImage || [])
-    setPartnersImage([])
+    
+    // Sync existing images: 
+    // prev array gets URLs, file array gets NULLs so lengths match 1:1
+    const existingImages = company.partnersImage || []
+    setPartnersImagePrev(existingImages)
+    setPartnersImage(new Array(existingImages.length).fill(null))
+    
     setMainImage(null)
     setIsModalOpen(true)
   }
@@ -482,50 +510,66 @@ const CompanyManagerContent = () => {
                     </div>
                   </div>
 
-                  {/* PARTNER IMAGES */}
+                  {/* PARTNER IMAGES - NEW DROPZONE UPLOAD */}
                   <div className="space-y-4 pt-8 border-t-2 border-gray-50">
-                    <div className="flex justify-between items-center">
-                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Partner Logos / Images</label>
-                      <button
-                        type="button"
-                        onClick={addPartnerImage}
-                        className="text-[9px] font-black bg-gray-100 text-black px-4 py-2 rounded-lg hover:bg-black hover:text-white transition-all"
-                      >
-                        + Add Image
-                      </button>
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Partner Logos / Images</label>
+                    
+                    {/* DROPZONE AREA */}
+                    <div
+                      onDragOver={onDragOver}
+                      onDragLeave={onDragLeave}
+                      onDrop={onDrop}
+                      className={`
+                        relative border-2 border-dashed rounded-2xl p-8 transition-all text-center
+                        ${isDragging ? "border-[#d11a2a] bg-red-50" : "border-gray-200 bg-gray-50/50"}
+                      `}
+                    >
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple // ENABLE MULTIPLE FILES
+                        className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        onChange={(e) => {
+                          if (e.target.files && e.target.files.length > 0) {
+                            handleFiles(Array.from(e.target.files))
+                          }
+                        }}
+                      />
+                      <div className="flex flex-col items-center justify-center gap-3 pointer-events-none">
+                        <div className={`p-4 rounded-full ${isDragging ? "bg-white text-[#d11a2a]" : "bg-white text-gray-400"}`}>
+                          <UploadCloud size={24} />
+                        </div>
+                        <p className="text-[10px] font-bold uppercase tracking-widest text-gray-500">
+                          {isDragging ? "Drop files now" : "Click or Drag & Drop"}
+                        </p>
+                        <p className="text-[9px] text-gray-400">Support multiple uploads</p>
+                      </div>
                     </div>
-                    <div className="space-y-3">
-                      {partnersImagePrev.map((preview, idx) => (
-                        <div key={idx} className="space-y-2">
-                          <label className="flex items-center gap-3 cursor-pointer bg-gray-100 text-black px-4 py-2 rounded-lg text-[9px] font-black uppercase hover:bg-gray-200 transition-all w-fit">
-                            <ImagePlus size={14} /> {preview ? "Change" : "Upload"}
-                            <input
-                              type="file"
-                              accept="image/*"
-                              className="hidden"
-                              onChange={(e) => {
-                                const f = e.target.files?.[0]
-                                if (f) {
-                                  updatePartnerImage(idx, f, URL.createObjectURL(f))
-                                }
-                              }}
+
+                    {/* IMAGE GRID PREVIEW */}
+                    {partnersImagePrev.length > 0 && (
+                      <div className="grid grid-cols-4 sm:grid-cols-5 gap-4 mt-4">
+                        {partnersImagePrev.map((preview, idx) => (
+                          <div key={idx} className="group relative aspect-square rounded-xl overflow-hidden bg-white border border-gray-100 shadow-sm">
+                            <img 
+                              src={preview || "/placeholder.svg"} 
+                              alt={`Partner ${idx + 1}`} 
+                              className="w-full h-full object-cover" 
                             />
-                          </label>
-                          {preview && (
-                            <div className="relative w-20 h-20 rounded-lg overflow-hidden border-2 border-gray-100">
-                              <img src={preview || "/placeholder.svg"} alt={`Partner ${idx + 1}`} className="w-full h-full object-cover" />
+                            {/* OVERLAY REMOVE BUTTON */}
+                            <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                               <button
                                 type="button"
                                 onClick={() => removePartnerImage(idx)}
-                                className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 hover:opacity-100 transition-opacity"
+                                className="bg-red-500 text-white p-2 rounded-full hover:scale-110 transition-transform"
                               >
-                                <X size={12} />
+                                <Trash2 size={14} />
                               </button>
                             </div>
-                          )}
-                        </div>
-                      ))}
-                    </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
               </motion.div>

@@ -1,238 +1,288 @@
 "use client";
 
-import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { motion, useReducedMotion } from "framer-motion";
-import { Chrome } from "lucide-react";
-import { FormEvent, useState } from "react";
-import { useRouter } from "next/navigation";
-
+import * as React from "react";
+import { useState } from "react";
 import { auth, db } from "@/lib/firebase";
 import {
   createUserWithEmailAndPassword,
+  updateProfile,
   GoogleAuthProvider,
   signInWithPopup,
 } from "firebase/auth";
-import { doc, getDoc, serverTimestamp, setDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc } from "firebase/firestore";
+import { useRouter } from "next/navigation";
+import { UserPlus, Mail, Lock, User, Loader2, Briefcase } from "lucide-react"; // Added Briefcase
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"; // Added Select imports
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { toast } from "sonner";
 
-const socialProviders = [{ name: "Google", icon: Chrome }];
+export default function RegisterPage() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [role, setRole] = useState<string>(""); // Changed to empty string for Select
+  const [isLoading, setIsLoading] = useState(false);
 
-export default function RegisterForm() {
-  const shouldReduceMotion = useReducedMotion();
   const router = useRouter();
 
-  const [acceptedTerms, setAcceptedTerms] = useState(false);
-  const [loading, setLoading] = useState(false);
+  /* =========================
+      AUTH LOGIC (Shared)
+     ========================= */
+  const handleRegister = async (e: React.FormEvent) => {
+    e.preventDefault();
 
-  const handleGoogleSignUp = async () => {
-    if (!acceptedTerms) return alert("You must accept the terms first.");
-    try {
-      setLoading(true);
-      const provider = new GoogleAuthProvider();
-      provider.setCustomParameters({ prompt: "select_account" });
-
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
-
-      const ref = doc(db, "users", user.uid);
-      const snap = await getDoc(ref);
-
-      if (!snap.exists()) {
-        // Save new user to Firestore
-        await setDoc(ref, {
-          uid: user.uid,
-          firstName: user.displayName?.split(" ")[0] || "",
-          lastName: user.displayName?.split(" ")[1] || "",
-          email: user.email,
-          provider: "google",
-          password: null,
-          createdAt: serverTimestamp(),
-        });
-      }
-
-      router.push("/auth/login");
-    } catch (err: any) {
-      alert(err.message || "Google sign-up failed");
-    } finally {
-      setLoading(false);
+    if (!email || !password || !fullName || !role) {
+      toast.error("Please fill in all fields");
+      return;
     }
-  };
 
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!acceptedTerms) return alert("You must accept the terms first.");
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      return;
+    }
 
-    const formData = new FormData(event.currentTarget);
-    const firstName = formData.get("firstName") as string;
-    const lastName = formData.get("lastName") as string;
-    const email = formData.get("email") as string;
-    const password = formData.get("password") as string;
-    const confirmPassword = formData.get("confirmPassword") as string;
-
-    if (password !== confirmPassword) return alert("Passwords do not match.");
+    setIsLoading(true);
+    const regToast = toast.loading("Creating account...");
 
     try {
-      setLoading(true);
       const cred = await createUserWithEmailAndPassword(auth, email, password);
       const user = cred.user;
 
-      await setDoc(doc(db, "users", user.uid), {
+      await updateProfile(user, { displayName: fullName });
+
+      const ref = doc(db, "adminaccount", user.uid);
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        toast.error("Account already exists", { id: regToast });
+        router.push("/auth/login");
+        return;
+      }
+
+      await setDoc(ref, {
         uid: user.uid,
-        firstName,
-        lastName,
         email,
+        fullName,
+        role,
+        accessLevel: role === "admin" ? "full" : "staff",
+        status: "active",
+        website: "disruptivesolutionsinc",
         provider: "password",
-        password,
-        createdAt: serverTimestamp(),
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
       });
 
+      toast.success("Account authorized!", { id: regToast });
       router.push("/auth/login");
     } catch (err: any) {
-      alert(err.message || "Registration failed");
+      toast.error(err.message || "Registration failed", { id: regToast });
     } finally {
-      setLoading(false);
+      setIsLoading(false);
+    }
+  };
+
+  const handleGoogleSignUp = async () => {
+    if (!role) {
+      toast.error("Please select an account role first");
+      return;
+    }
+
+    setIsLoading(true);
+    const googleToast = toast.loading("Waiting for Google authentication...");
+
+    try {
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: "select_account" });
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      const ref = doc(db, "adminaccount", user.uid);
+      const snap = await getDoc(ref);
+
+      if (snap.exists()) {
+        toast.info("Account already exists. Please sign in.", {
+          id: googleToast,
+        });
+        router.push("/auth/login");
+        return;
+      }
+
+      await setDoc(ref, {
+        uid: user.uid,
+        email: user.email,
+        fullName: user.displayName || "",
+        role,
+        accessLevel: role === "admin" ? "full" : "staff",
+        status: "active",
+        provider: "google",
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+      });
+
+      toast.success("Google account authorized!", { id: googleToast });
+      router.push("/auth/login");
+    } catch (err: any) {
+      if (err?.code !== "auth/popup-closed-by-user") {
+        toast.error(err.message || "Google sign up failed", {
+          id: googleToast,
+        });
+      } else {
+        toast.dismiss(googleToast);
+      }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: shouldReduceMotion ? 0 : 18 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.45, ease: shouldReduceMotion ? "linear" : [0.16, 1, 0.3, 1] }}
-      className="group w-full rounded-3xl overflow-hidden border border-border/60 bg-card/85 p-8 backdrop-blur-xl sm:p-12 relative"
-    >
-      {/* HEADER */}
-      <div className="mb-8 text-center">
-        <div className="mx-auto inline-flex items-center gap-2 rounded-full border border-border/60 bg-white/5 px-3 py-1 text-xs uppercase tracking-[0.28em] text-muted-foreground">
-          Sign Up
-        </div>
-        <h1 className="mt-3 text-2xl font-semibold text-foreground sm:text-3xl">
-          Create your account
-        </h1>
-        <p className="mt-2 text-sm text-muted-foreground">
-          Sign up with email or Google.
-        </p>
-      </div>
+    <div className="min-h-screen w-full flex items-center justify-center bg-slate-50 px-4 py-10">
+      <Card className="w-full max-w-md border-none shadow-2xl rounded-[32px] bg-white/80 backdrop-blur-xl">
+        <CardHeader className="pt-10 pb-6 text-center">
+          <div className="mx-auto w-12 h-12 bg-[#d11a2a] rounded-2xl flex items-center justify-center mb-4 shadow-lg shadow-red-100">
+            <UserPlus className="text-white w-6 h-6" />
+          </div>
+          <CardTitle className="text-2xl font-black uppercase italic tracking-tighter text-slate-800">
+            Internal Access
+          </CardTitle>
+          <CardDescription className="text-[10px] font-bold uppercase tracking-widest text-slate-400">
+            Provisioning Authorized Staff & Admins
+          </CardDescription>
 
-      {/* EMAIL FORM */}
-      <form className="grid gap-6 sm:grid-cols-2" onSubmit={handleSubmit}>
-        <div className="space-y-2 sm:col-span-1">
-          <Label htmlFor="first-name">First name</Label>
-          <Input
-            id="first-name"
-            name="firstName"
-            placeholder="Alex"
-            autoComplete="given-name"
-            required
-            className="h-11 rounded-2xl border-border/60 bg-background/60 px-4"
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-1">
-          <Label htmlFor="last-name">Last name</Label>
-          <Input
-            id="last-name"
-            name="lastName"
-            placeholder="Johnson"
-            autoComplete="family-name"
-            required
-            className="h-11 rounded-2xl border-border/60 bg-background/60 px-4"
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-2">
-          <Label htmlFor="sign-up-email">Email address</Label>
-          <Input
-            id="sign-up-email"
-            type="email"
-            name="email"
-            placeholder="you@example.com"
-            autoComplete="email"
-            required
-            className="h-11 rounded-2xl border-border/60 bg-background/60 px-4"
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-1">
-          <Label htmlFor="sign-up-password">Password</Label>
-          <Input
-            id="sign-up-password"
-            type="password"
-            name="password"
-            placeholder="Create a password"
-            autoComplete="new-password"
-            required
-            className="h-11 rounded-2xl border-border/60 bg-background/60 px-4"
-          />
-        </div>
-        <div className="space-y-2 sm:col-span-1">
-          <Label htmlFor="sign-up-confirm-password">Confirm password</Label>
-          <Input
-            id="sign-up-confirm-password"
-            type="password"
-            name="confirmPassword"
-            placeholder="Repeat password"
-            autoComplete="new-password"
-            required
-            className="h-11 rounded-2xl border-border/60 bg-background/60 px-4"
-          />
-        </div>
+          {/* THE NEW TIP */}
+          <p className="text-[9px] font-medium text-slate-400/80 italic mt-1 uppercase tracking-tight">
+            Tip: Select role before using Google Register
+          </p>
+        </CardHeader>
 
-        <div className="sm:col-span-2">
-          <label className="flex items-start gap-3 text-sm text-muted-foreground">
-            <Checkbox
-              id="sign-up-terms"
-              checked={acceptedTerms}
-              onCheckedChange={(checked) => setAcceptedTerms(Boolean(checked))}
-            />
-            <span>
-              I agree to the{" "}
-              <button type="button" className="text-primary underline-offset-4 hover:underline">
-                terms of service
-              </button>{" "}
-              and{" "}
-              <button type="button" className="text-primary underline-offset-4 hover:underline">
-                privacy policy
+        <CardContent className="pb-10 px-8">
+          <form onSubmit={handleRegister} className="space-y-4">
+            {/* FULL NAME */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
+                Full Name
+              </Label>
+              <div className="relative">
+                <User className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
+                <Input
+                  className="pl-11 h-12 rounded-2xl bg-slate-50/50"
+                  placeholder="John Doe"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* UPDATED ROLE SELECTOR */}
+            {/* UPDATED ROLE SELECTOR (FULL WIDTH) */}
+            <div className="space-y-1.5 w-full">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
+                Account Role
+              </Label>
+              <div className="relative w-full">
+                <Briefcase className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10 pointer-events-none" />
+                <Select onValueChange={(value) => setRole(value)} value={role}>
+                  <SelectTrigger className="w-full pl-11 h-12 rounded-2xl bg-slate-50/50 border-slate-200 focus:ring-[#d11a2a]">
+                    <SelectValue placeholder="Select Role" />
+                  </SelectTrigger>
+                  <SelectContent className="rounded-xl">
+                    <SelectItem value="admin">Administrator</SelectItem>
+                    <SelectItem value="warehouse">Warehouse Staff</SelectItem>
+                    <SelectItem value="seo">SEO Specialist</SelectItem>
+                    <SelectItem value="hr">Human Resources</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* EMAIL */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
+                Email
+              </Label>
+              <div className="relative">
+                <Mail className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
+                <Input
+                  type="email"
+                  className="pl-11 h-12 rounded-2xl bg-slate-50/50"
+                  placeholder="name@disruptive.com"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            {/* PASSWORD */}
+            <div className="space-y-1.5">
+              <Label className="text-[10px] font-black uppercase text-slate-400 ml-1">
+                Password
+              </Label>
+              <div className="relative">
+                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
+                <Input
+                  type="password"
+                  className="pl-11 h-12 rounded-2xl bg-slate-50/50"
+                  placeholder="••••••••"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="pt-2 space-y-3">
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-[#d11a2a] h-14 rounded-2xl font-black uppercase tracking-widest text-xs shadow-lg shadow-red-100 transition-transform active:scale-[0.98]"
+              >
+                {isLoading ? (
+                  <Loader2 className="animate-spin" />
+                ) : (
+                  "Complete Registration"
+                )}
+              </Button>
+
+              <Button
+                type="button"
+                onClick={handleGoogleSignUp}
+                disabled={isLoading || !role}
+                variant="outline"
+                className="w-full h-12 rounded-2xl text-xs font-bold border-slate-200 transition-transform active:scale-[0.98]"
+              >
+                Sign Up with Google
+              </Button>
+            </div>
+
+            <p className="text-center text-xs text-slate-500 pt-2">
+              Already have an account?{" "}
+              <button
+                type="button"
+                onClick={() => router.push("/auth/login")}
+                className="font-black text-[#d11a2a] hover:underline"
+              >
+                Sign in
               </button>
-              .
-            </span>
-          </label>
-        </div>
-
-        <div className="sm:col-span-2">
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full rounded-full bg-primary px-6 py-3 text-primary-foreground shadow-[0_20px_60px_-30px_rgba(79,70,229,0.75)] transition-transform duration-300 hover:-translate-y-1"
-          >
-            {loading ? "Creating account..." : "Create account"}
-          </Button>
-        </div>
-      </form>
-
-      {/* OR DIVIDER */}
-      <div className="my-6 flex items-center gap-3">
-        <div className="h-px flex-1 bg-border/70" />
-        <span className="text-xs uppercase tracking-[0.34em] text-muted-foreground">
-          or
-        </span>
-        <div className="h-px flex-1 bg-border/70" />
-      </div>
-
-      {/* GOOGLE BUTTON */}
-      <div className="mb-8 flex flex-col gap-4">
-        {socialProviders.map((provider) => (
-          <Button
-            key={provider.name}
-            variant="outline"
-            onClick={handleGoogleSignUp}
-            disabled={loading}
-            className="flex items-center justify-center gap-2 rounded-full border-border/60 bg-card/70 text-sm text-foreground transition-transform duration-300 hover:-translate-y-1 hover:text-primary"
-          >
-            <provider.icon className="h-4 w-4" aria-hidden />
-            <span className="hidden sm:inline">Continue With Google</span>
-          </Button>
-        ))}
-      </div>
-    </motion.div>
+            </p>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
   );
 }
