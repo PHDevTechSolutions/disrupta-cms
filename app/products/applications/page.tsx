@@ -48,7 +48,7 @@ import {
 import { PageWrapper } from "@/components/sidebar/page-wrapper";
 import { cn } from "@/lib/utils";
 
-const WEBSITE_OPTIONS = ["Disruptive", "Ecoshift Corporation", "VAH"];
+const WEBSITE_OPTIONS = ["Disruptive Solutions Inc.", "Ecoshift Corporation", "VAH"];
 
 export default function ApplicationsPage() {
   const CLOUDINARY_UPLOAD_PRESET = "taskflow_preset"; 

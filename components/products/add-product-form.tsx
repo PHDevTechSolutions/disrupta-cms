@@ -1,7 +1,7 @@
 "use client";
 
 import * as React from "react";
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useDropzone } from "react-dropzone";
 import { db } from "@/lib/firebase";
 import {
@@ -13,6 +13,7 @@ import {
   updateDoc,
   query,
   where,
+  getDocs,
 } from "firebase/firestore";
 import {
   ImagePlus,
@@ -24,6 +25,8 @@ import {
   Factory,
   LayoutGrid,
   Zap,
+  Plus,
+  Images,
 } from "lucide-react";
 
 // UI Components
@@ -39,7 +42,16 @@ interface MasterItem {
   id: string;
   name: string;
   websites: string[];
+  isTemp?: boolean;
 }
+
+interface PendingItem {
+  type: "brand" | "category" | "application" | "spec";
+  name: string;
+  collection: string;
+  field: string;
+}
+
 interface SpecValue {
   name: string;
   value: string;
@@ -62,17 +74,22 @@ export default function AddProductForm({
   const CLOUDINARY_CLOUD_NAME = "dvmpn8mjh";
 
   const [isPublishing, setIsPublishing] = useState(false);
+
+  // FORM STATE
   const [productName, setProductName] = useState("");
   const [shortDesc, setShortDesc] = useState("");
   const [sku, setSku] = useState("");
   const [regPrice, setRegPrice] = useState("");
   const [salePrice, setSalePrice] = useState("");
 
-  // MASTER DATA
+  // MASTER DATA STATE
   const [availableSpecs, setAvailableSpecs] = useState<MasterItem[]>([]);
   const [availableCats, setAvailableCats] = useState<MasterItem[]>([]);
   const [availableBrands, setAvailableBrands] = useState<MasterItem[]>([]);
   const [availableApps, setAvailableApps] = useState<MasterItem[]>([]);
+
+  // NEW ITEM TRACKING
+  const pendingItemsRef = useRef<PendingItem[]>([]);
 
   // SELECTIONS
   const [selectedWebs, setSelectedWebs] = useState<string[]>([]);
@@ -92,8 +109,8 @@ export default function AddProductForm({
   );
   const [existingQrImage, setExistingQrImage] = useState("");
 
+  // --- 1. FETCH MASTER DATA ---
   useEffect(() => {
-    // Clear data if no website selected
     if (selectedWebs.length === 0) {
       setAvailableSpecs([]);
       setAvailableCats([]);
@@ -102,78 +119,39 @@ export default function AddProductForm({
       return;
     }
 
-    // DEBUG: Check what we are querying
-    console.log("Querying for websites:", selectedWebs);
-
     const qFilter = where("websites", "array-contains-any", selectedWebs);
 
-    // 1. SPECS (Already working)
     const unsubSpecs = onSnapshot(
       query(collection(db, "specs"), qFilter),
       (snap) => {
-        setAvailableSpecs(
-          snap.docs.map((d) => ({ id: d.id, ...d.data() }) as MasterItem),
+        setAvailableSpecs((prev) => mergeWithPending(prev, snap, "spec"));
+      },
+    );
+
+    const unsubCats = onSnapshot(
+      query(collection(db, "categoriesmaintenance"), qFilter),
+      (snap) => {
+        setAvailableCats((prev) =>
+          mergeWithPending(prev, snap, "category", "title"),
         );
       },
     );
 
-    // 2. CATEGORIES
-    const unsubCats = onSnapshot(
-      query(collection(db, "categoriesmaintenance"), qFilter),
-      (snap) => {
-        const data = snap.docs.map((d) => {
-          const raw = d.data();
-          // SAFEGUARD: Check for 'name', 'categoryName', or 'title'
-          return {
-            id: d.id,
-            name:
-              raw.name || raw.categoryName || raw.title || "Unnamed Category",
-            websites: raw.websites,
-          } as MasterItem;
-        });
-        console.log("Categories Found:", data.length, data); // Check Console
-        setAvailableCats(data);
-      },
-    );
-
-    // 3. BRANDS
-    // Note: Collection is 'brand_name', field might be 'brand_name' or 'brand'
     const unsubBrands = onSnapshot(
-      query(collection(db, "brands"), qFilter),
+      query(collection(db, "brand_name"), qFilter),
       (snap) => {
-        const data = snap.docs.map((d) => {
-          const raw = d.data();
-          // SAFEGUARD: Check for 'name', 'brand', 'brandName', or 'brand_name'
-          return {
-            id: d.id,
-            name:
-              raw.name ||
-              raw.brands ||
-              raw.brandsName ||
-              raw.brands_name ||
-              "Unnamed Brand",
-            websites: raw.websites,
-          } as unknown as MasterItem;
-        });
-        console.log("Brands Found:", data.length, data); // Check Console
-        setAvailableBrands(data);
+        setAvailableBrands((prev) =>
+          mergeWithPending(prev, snap, "brand", "title"),
+        );
       },
     );
 
-    // 4. APPLICATIONS
     const unsubApps = onSnapshot(
       query(collection(db, "applications"), qFilter),
       (snap) => {
-        const data = snap.docs.map((d) => {
-          const raw = d.data();
-          return {
-            id: d.id,
-            name: raw.name || raw.applicationName || "Unnamed App",
-            websites: raw.websites,
-          } as MasterItem;
-        });
-        console.log("Apps Found:", data.length, data); // Check Console
-        setAvailableApps(data);
+        setAvailableApps((prev) =>
+          mergeWithPending(prev, snap, "application", "title"),
+        );
       },
     );
 
@@ -185,6 +163,35 @@ export default function AddProductForm({
     };
   }, [selectedWebs]);
 
+  // Helper to maintain local pending items in view
+  const mergeWithPending = (
+    prev: MasterItem[],
+    snap: any,
+    type: string,
+    fieldKey = "name",
+  ) => {
+    const dbItems = snap.docs.map((d: any) => {
+      const raw = d.data();
+      return {
+        id: d.id,
+        name: raw[fieldKey] || raw.name || "Unnamed",
+        websites: raw.websites || [],
+      } as MasterItem;
+    });
+
+    const currentPending = pendingItemsRef.current
+      .filter((p) => p.type === type)
+      .map((p) => ({
+        id: `temp-${p.name}`,
+        name: p.name,
+        websites: selectedWebs,
+        isTemp: true,
+      }));
+
+    return [...dbItems, ...currentPending];
+  };
+
+  // --- 2. LOAD EDIT DATA ---
   useEffect(() => {
     if (editData) {
       setProductName(editData.name || "");
@@ -215,6 +222,8 @@ export default function AddProductForm({
     }
   }, [editData]);
 
+  // --- 3. HANDLERS ---
+
   const uploadToCloudinary = async (file: File) => {
     const formData = new FormData();
     formData.append("file", file);
@@ -227,12 +236,124 @@ export default function AddProductForm({
     return data.secure_url;
   };
 
+  const handleAddItem = (
+    type: PendingItem["type"],
+    name: string,
+    collectionName: string,
+    dbField: string,
+  ) => {
+    if (!name.trim()) return;
+    const cleanName = name.trim();
+
+    // 1. DUPLICATE CHECK (LOCAL)
+    // We check case-insensitive against the list currently loaded in state
+    let listToCheck: MasterItem[] = [];
+    if (type === "brand") listToCheck = availableBrands;
+    if (type === "category") listToCheck = availableCats;
+    if (type === "application") listToCheck = availableApps;
+    if (type === "spec") listToCheck = availableSpecs;
+
+    const exists = listToCheck.some(
+      (item) => item.name.toLowerCase() === cleanName.toLowerCase(),
+    );
+
+    if (exists) {
+      toast.error(`"${cleanName}" already exists in ${type}s.`);
+      return;
+    }
+
+    // 2. Add to pending ref
+    pendingItemsRef.current.push({
+      type,
+      name: cleanName,
+      collection: collectionName,
+      field: dbField,
+    });
+
+    // 3. Update local state immediately
+    const newItem: MasterItem = {
+      id: `temp-${cleanName}`,
+      name: cleanName,
+      websites: selectedWebs,
+      isTemp: true,
+    };
+
+    if (type === "brand") {
+      setAvailableBrands((prev) => [...prev, newItem]);
+      setSelectedBrands((prev) => [...prev, cleanName]);
+    } else if (type === "category") {
+      setAvailableCats((prev) => [...prev, newItem]);
+      setSelectedCats((prev) => [...prev, cleanName]);
+    } else if (type === "application") {
+      setAvailableApps((prev) => [...prev, newItem]);
+      setSelectedApps((prev) => [...prev, cleanName]);
+    } else if (type === "spec") {
+      setAvailableSpecs((prev) => [...prev, newItem]);
+      setSpecValues((prev) => ({ ...prev, [cleanName]: "" }));
+    }
+  };
+
   const handlePublish = async () => {
     if (!productName || selectedWebs.length === 0)
       return toast.error("Please select at least one website and name!");
+
     setIsPublishing(true);
-    const publishToast = toast.loading("Publishing...");
+    const publishToast = toast.loading("Validating...");
+
     try {
+      // A. CHECK FOR DUPLICATE PRODUCT NAME
+      // We query by name first, then check websites in JS to avoid complex index requirements
+      const dupQuery = query(
+        collection(db, "products"),
+        where("name", "==", productName),
+      );
+      const dupSnap = await getDocs(dupQuery);
+
+      const isDuplicate = dupSnap.docs.some((docSnap) => {
+        // If editing, ignore our own document
+        if (editData && docSnap.id === editData.id) return false;
+
+        const data = docSnap.data();
+        const productWebsites = data.website || [];
+        // Check if any selected website overlaps with the existing product's websites
+        return productWebsites.some((w: string) => selectedWebs.includes(w));
+      });
+
+      if (isDuplicate) {
+        toast.dismiss(publishToast);
+        toast.error(
+          "This product name already exists on one of the selected websites.",
+        );
+        setIsPublishing(false);
+        return; // STOP EXECUTION
+      }
+
+      // B. SAVE PENDING TAGS (Brands/Cats/etc)
+      if (pendingItemsRef.current.length > 0) {
+        toast.loading("Saving new tags...", { id: publishToast });
+        const savePromises = pendingItemsRef.current.map((item) => {
+          const payload: any = {
+            websites: selectedWebs,
+            createdAt: serverTimestamp(),
+            updatedAt: serverTimestamp(),
+          };
+          payload[item.field] = item.name;
+
+          if (item.type === "application") {
+            payload.isActive = true;
+            payload.imageUrl = "";
+            payload.description = "";
+          }
+
+          return addDoc(collection(db, item.collection), payload);
+        });
+
+        await Promise.all(savePromises);
+        pendingItemsRef.current = [];
+      }
+
+      // C. UPLOAD IMAGES
+      toast.loading("Uploading images...", { id: publishToast });
       const mainUrl = mainImage
         ? await uploadToCloudinary(mainImage)
         : existingMainImage;
@@ -242,10 +363,13 @@ export default function AddProductForm({
       const uploadedGallery = await Promise.all(
         galleryImages.map(uploadToCloudinary),
       );
+
+      // D. PREPARE SPECS
       const technicalSpecs = Object.entries(specValues)
         .filter(([_, val]) => val.trim() !== "")
         .map(([name, value]) => ({ name, value }));
 
+      // E. SAVE PRODUCT
       const payload = {
         name: productName,
         shortDescription: shortDesc,
@@ -272,15 +396,22 @@ export default function AddProductForm({
         });
       }
 
-      toast.success("Product Saved!", { id: publishToast });
-      if (onFinished) onFinished();
+      toast.success("Product Saved Successfully!", { id: publishToast });
+
+      // F. CLOSE COMPONENT
+      if (onFinished) {
+        // Small delay to let the toast be seen, or immediate
+        onFinished();
+      }
     } catch (err) {
-      toast.error("Error saving product");
+      console.error(err);
+      toast.error("Error saving product", { id: publishToast });
     } finally {
       setIsPublishing(false);
     }
   };
 
+  // Drag & Drop Hooks
   const onDropMain = useCallback((files: File[]) => {
     if (files[0]) setMainImage(files[0]);
   }, []);
@@ -304,6 +435,7 @@ export default function AddProductForm({
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-slate-50 min-h-screen">
       <div className="md:col-span-2 space-y-6">
+        {/* WEBSITES CARD */}
         <Card className="shadow-sm border-none ring-2 ring-blue-500/20">
           <CardHeader className="pb-3">
             <CardTitle className="text-[10px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-2">
@@ -315,10 +447,18 @@ export default function AddProductForm({
               <div
                 key={web}
                 onClick={() => toggleWebsite(web)}
-                className={`flex-1 min-w-[180px] p-4 rounded-xl border-2 transition-all cursor-pointer flex justify-between items-center ${selectedWebs.includes(web) ? "border-blue-500 bg-blue-50 ring-4 ring-blue-500/5" : "border-slate-100 bg-white hover:border-slate-200"}`}
+                className={`flex-1 min-w-[180px] p-4 rounded-xl border-2 transition-all cursor-pointer flex justify-between items-center ${
+                  selectedWebs.includes(web)
+                    ? "border-blue-500 bg-blue-50 ring-4 ring-blue-500/5"
+                    : "border-slate-100 bg-white hover:border-slate-200"
+                }`}
               >
                 <span
-                  className={`text-[11px] font-black uppercase ${selectedWebs.includes(web) ? "text-blue-700" : "text-slate-500"}`}
+                  className={`text-[11px] font-black uppercase ${
+                    selectedWebs.includes(web)
+                      ? "text-blue-700"
+                      : "text-slate-500"
+                  }`}
                 >
                   {web}
                 </span>
@@ -328,73 +468,151 @@ export default function AddProductForm({
           </CardContent>
         </Card>
 
+        {/* UNIFIED MEDIA ASSETS CARD */}
         <Card className="shadow-sm border-none ring-1 ring-slate-200">
           <CardHeader>
-            <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
-              Main Image & QR Code
+            <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest flex items-center gap-2">
+              <Images className="w-4 h-4" /> Media Assets
             </CardTitle>
           </CardHeader>
-          <CardContent className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <Label className="text-[9px] font-black uppercase text-slate-400">
-                Main Product Image
-              </Label>
-              <div
-                {...getMainRootProps()}
-                className="relative border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer hover:bg-slate-50 transition-all border-slate-200 min-h-[180px] flex flex-col items-center justify-center"
-              >
-                <input {...getMainInputProps()} />
-                {mainImage || existingMainImage ? (
-                  <div className="relative w-full h-32 group">
-                    <img
-                      src={
-                        mainImage
-                          ? URL.createObjectURL(mainImage)
-                          : existingMainImage
-                      }
-                      className="w-full h-full object-contain rounded-lg"
-                    />
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setMainImage(null);
-                        setExistingMainImage("");
-                      }}
-                      className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors z-10"
-                    >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <ImagePlus className="w-8 h-8 mb-2 mx-auto text-slate-300" />
-                    <p className="text-[9px] font-black uppercase text-slate-400">
-                      Upload Main
+          <CardContent className="space-y-6">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {/* 1. Main Image */}
+              <div className="space-y-2">
+                <Label className="text-[9px] font-black uppercase text-slate-400">
+                  Main Product Image
+                </Label>
+                <div
+                  {...getMainRootProps()}
+                  className="relative border-2 border-dashed rounded-xl p-2 text-center cursor-pointer hover:bg-slate-50 transition-all border-slate-200 h-[160px] flex flex-col items-center justify-center bg-white"
+                >
+                  <input {...getMainInputProps()} />
+                  {mainImage || existingMainImage ? (
+                    <div className="relative w-full h-full group">
+                      <img
+                        src={
+                          mainImage
+                            ? URL.createObjectURL(mainImage)
+                            : existingMainImage
+                        }
+                        className="w-full h-full object-contain rounded-lg"
+                      />
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setMainImage(null);
+                          setExistingMainImage("");
+                        }}
+                        className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 z-10"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center">
+                      <ImagePlus className="w-6 h-6 mb-2 text-slate-300" />
+                      <p className="text-[9px] font-bold text-slate-400 uppercase">
+                        Main Image
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 2. QR Code */}
+              <div className="space-y-2">
+                <Label className="text-[9px] font-black uppercase text-slate-400">
+                  QR Code
+                </Label>
+                <QrDropzone
+                  file={qrImage}
+                  existingUrl={existingQrImage}
+                  onRemove={() => {
+                    setQrImage(null);
+                    setExistingQrImage("");
+                  }}
+                  onDrop={(files) => {
+                    if (files[0]) setQrImage(files[0]);
+                  }}
+                />
+              </div>
+
+              {/* 3. Gallery Dropzone */}
+              <div className="space-y-2">
+                <Label className="text-[9px] font-black uppercase text-slate-400">
+                  Add Gallery Images
+                </Label>
+                <div
+                  {...getGalleryRootProps()}
+                  className="relative border-2 border-dashed rounded-xl p-2 text-center cursor-pointer hover:bg-blue-50 transition-all border-blue-200 h-[160px] flex flex-col items-center justify-center bg-blue-50/10"
+                >
+                  <input {...getGalleryInputProps()} />
+                  <div className="flex flex-col items-center">
+                    <Images className="w-6 h-6 mb-2 text-blue-400" />
+                    <p className="text-[9px] font-bold text-blue-500 uppercase">
+                      Drop Gallery Here
+                    </p>
+                    <p className="text-[8px] text-slate-400 mt-1">
+                      Multi-select supported
                     </p>
                   </div>
-                )}
+                </div>
               </div>
             </div>
 
-            <div className="space-y-2">
-              <Label className="text-[9px] font-black uppercase text-slate-400">
-                QR Code Image
-              </Label>
-              <QrDropzone
-                file={qrImage}
-                existingUrl={existingQrImage}
-                onRemove={() => {
-                  setQrImage(null);
-                  setExistingQrImage("");
-                }}
-                onDrop={(files) => {
-                  if (files[0]) setQrImage(files[0]);
-                }}
-              />
-            </div>
+            {/* Bottom Row: Gallery Grid */}
+            {(existingGalleryImages.length > 0 || galleryImages.length > 0) && (
+              <div className="pt-4 border-t border-slate-100">
+                <Label className="text-[9px] font-black uppercase text-slate-400 mb-3 block">
+                  Gallery Preview
+                </Label>
+                <div className="grid grid-cols-4 sm:grid-cols-6 gap-3">
+                  {existingGalleryImages.map((img, i) => (
+                    <div
+                      key={`exist-${i}`}
+                      className="aspect-square relative border rounded-lg overflow-hidden shadow-sm group bg-white"
+                    >
+                      <img src={img} className="object-cover w-full h-full" />
+                      <button
+                        onClick={() =>
+                          setExistingGalleryImages((prev) =>
+                            prev.filter((_, idx) => idx !== i),
+                          )
+                        }
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {galleryImages.map((img, i) => (
+                    <div
+                      key={`new-${i}`}
+                      className="aspect-square relative border rounded-lg overflow-hidden shadow-sm group bg-white"
+                    >
+                      <img
+                        src={URL.createObjectURL(img)}
+                        className="object-cover w-full h-full"
+                      />
+                      <button
+                        onClick={() =>
+                          setGalleryImages((prev) =>
+                            prev.filter((_, idx) => idx !== i),
+                          )
+                        }
+                        className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </CardContent>
         </Card>
 
+        {/* GENERAL INFO & SPECS */}
         <Card className="shadow-sm border-none ring-1 ring-slate-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-slate-700 font-black text-xs uppercase tracking-widest">
@@ -423,13 +641,24 @@ export default function AddProductForm({
                 onChange={(e) => setShortDesc(e.target.value)}
               />
             </div>
+
+            {/* SPECS SECTION */}
             <div className="pt-6 border-t border-slate-100">
-              <div className="flex items-center gap-2 mb-4">
-                <Zap className="w-4 h-4 text-amber-500" />
-                <Label className="text-[11px] font-black uppercase text-slate-500">
-                  Technical Specifications
-                </Label>
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-2">
+                  <Zap className="w-4 h-4 text-amber-500" />
+                  <Label className="text-[11px] font-black uppercase text-slate-500">
+                    Technical Specifications
+                  </Label>
+                </div>
+                {/* Add Custom Spec Button */}
+                <AddCustomItem
+                  placeholder="New Spec Name..."
+                  onAdd={(name) => handleAddItem("spec", name, "specs", "name")}
+                  disabled={selectedWebs.length === 0}
+                />
               </div>
+
               {selectedWebs.length === 0 ? (
                 <div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
                   <p className="text-[10px] font-bold text-slate-400 uppercase">
@@ -441,10 +670,19 @@ export default function AddProductForm({
                   {availableSpecs.map((spec) => (
                     <div
                       key={spec.id}
-                      className="space-y-1 bg-white p-3 rounded-xl border border-slate-100 shadow-sm"
+                      className={`space-y-1 bg-white p-3 rounded-xl border shadow-sm ${
+                        spec.isTemp
+                          ? "border-amber-200 ring-2 ring-amber-50"
+                          : "border-slate-100"
+                      }`}
                     >
-                      <Label className="text-[10px] font-black uppercase text-slate-500">
+                      <Label className="text-[10px] font-black uppercase text-slate-500 flex justify-between">
                         {spec.name}
+                        {spec.isTemp && (
+                          <span className="text-amber-500 text-[8px]">
+                            (New)
+                          </span>
+                        )}
                       </Label>
                       <Input
                         placeholder={`Enter ${spec.name}...`}
@@ -464,69 +702,9 @@ export default function AddProductForm({
             </div>
           </CardContent>
         </Card>
-
-        <Card className="shadow-sm border-none ring-1 ring-slate-200">
-          <CardHeader>
-            <CardTitle className="text-[10px] font-black uppercase text-slate-500 tracking-widest">
-              Gallery Images
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div
-              {...getGalleryRootProps()}
-              className="border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer hover:bg-slate-50 transition-all border-slate-200"
-            >
-              <input {...getGalleryInputProps()} />
-              <ImagePlus className="w-10 h-10 mb-2 mx-auto text-slate-300" />
-              <p className="text-[10px] font-black uppercase text-slate-400">
-                Drag & Drop Gallery Images
-              </p>
-            </div>
-            <div className="grid grid-cols-4 gap-3">
-              {existingGalleryImages.map((img, i) => (
-                <div
-                  key={`exist-${i}`}
-                  className="aspect-square relative border rounded-xl overflow-hidden shadow-sm group"
-                >
-                  <img src={img} className="object-cover w-full h-full" />
-                  <button
-                    onClick={() =>
-                      setExistingGalleryImages((prev) =>
-                        prev.filter((_, idx) => idx !== i),
-                      )
-                    }
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-              {galleryImages.map((img, i) => (
-                <div
-                  key={`new-${i}`}
-                  className="aspect-square relative border rounded-xl overflow-hidden shadow-sm group"
-                >
-                  <img
-                    src={URL.createObjectURL(img)}
-                    className="object-cover w-full h-full"
-                  />
-                  <button
-                    onClick={() =>
-                      setGalleryImages((prev) =>
-                        prev.filter((_, idx) => idx !== i),
-                      )
-                    }
-                    className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
       </div>
 
+      {/* SIDEBAR */}
       <div className="space-y-6">
         <Card className="border-none ring-1 ring-slate-200 shadow-sm overflow-hidden">
           <CardHeader className="bg-slate-50/50 py-3 text-center border-b">
@@ -540,10 +718,14 @@ export default function AddProductForm({
               icon={<Tag className="w-3 h-3" />}
               items={availableCats}
               selected={selectedCats}
+              disabled={selectedWebs.length === 0}
               onToggle={(v: string) =>
                 setSelectedCats((prev) =>
                   prev.includes(v) ? prev.filter((i) => i !== v) : [...prev, v],
                 )
+              }
+              onAdd={(name: string) =>
+                handleAddItem("category", name, "categoriesmaintenance", "name")
               }
             />
             <SidebarList
@@ -551,10 +733,14 @@ export default function AddProductForm({
               icon={<Factory className="w-3 h-3" />}
               items={availableBrands}
               selected={selectedBrands}
+              disabled={selectedWebs.length === 0}
               onToggle={(v: string) =>
                 setSelectedBrands((prev) =>
                   prev.includes(v) ? prev.filter((i) => i !== v) : [...prev, v],
                 )
+              }
+              onAdd={(name: string) =>
+                handleAddItem("brand", name, "brand_name", "title")
               }
             />
             <SidebarList
@@ -562,15 +748,20 @@ export default function AddProductForm({
               icon={<LayoutGrid className="w-3 h-3" />}
               items={availableApps}
               selected={selectedApps}
+              disabled={selectedWebs.length === 0}
               onToggle={(v: string) =>
                 setSelectedApps((prev) =>
                   prev.includes(v) ? prev.filter((a) => a !== v) : [...prev, v],
                 )
               }
+              onAdd={(name: string) =>
+                handleAddItem("application", name, "applications", "title")
+              }
             />
           </CardContent>
         </Card>
 
+        {/* PRICING & SKU */}
         <Card className="border-none ring-1 ring-slate-200 p-4 space-y-4">
           <div className="grid grid-cols-2 gap-2">
             <div className="space-y-1">
@@ -624,26 +815,45 @@ export default function AddProductForm({
   );
 }
 
-function SidebarList({ label, icon, items, selected, onToggle }: any) {
+// --- SUBCOMPONENTS ---
+
+function SidebarList({
+  label,
+  icon,
+  items,
+  selected,
+  onToggle,
+  onAdd,
+  disabled,
+}: any) {
   return (
     <div className="space-y-3">
-      <div className="flex items-center gap-2 text-blue-600">
-        {icon}
-        <Label className="text-[10px] font-black uppercase tracking-tighter">
-          {label}
-        </Label>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2 text-blue-600">
+          {icon}
+          <Label className="text-[10px] font-black uppercase tracking-tighter">
+            {label}
+          </Label>
+        </div>
       </div>
-      {items.length === 0 ? (
-        <p className="text-[9px] text-slate-400 italic">No items found.</p>
-      ) : (
-        <div className="space-y-1 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-          {items.map((item: MasterItem) => {
+
+      <div className="space-y-1 max-h-48 overflow-y-auto pr-2 custom-scrollbar min-h-[50px]">
+        {items.length === 0 ? (
+          <p className="text-[9px] text-slate-400 italic py-2">
+            No items found.
+          </p>
+        ) : (
+          items.map((item: MasterItem) => {
             const isSelected = selected.includes(item.name);
             return (
               <div
                 key={item.id}
                 onClick={() => onToggle(item.name)}
-                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${isSelected ? "bg-blue-50 ring-1 ring-blue-100" : "hover:bg-slate-50"}`}
+                className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-all ${
+                  isSelected
+                    ? "bg-blue-50 ring-1 ring-blue-100"
+                    : "hover:bg-slate-50"
+                } ${item.isTemp ? "bg-amber-50 ring-amber-100" : ""}`}
               >
                 <Checkbox
                   checked={isSelected}
@@ -651,15 +861,72 @@ function SidebarList({ label, icon, items, selected, onToggle }: any) {
                   onClick={(e) => e.stopPropagation()}
                 />
                 <span
-                  className={`text-[11px] font-bold ${isSelected ? "text-blue-700" : "text-slate-600"}`}
+                  className={`text-[11px] font-bold ${
+                    isSelected ? "text-blue-700" : "text-slate-600"
+                  } ${item.isTemp ? "italic" : ""}`}
                 >
-                  {item.name}
+                  {item.name} {item.isTemp && "*"}
                 </span>
               </div>
             );
-          })}
+          })
+        )}
+      </div>
+
+      {/* Add New Button */}
+      {!disabled && (
+        <div className="pt-2 border-t border-slate-100">
+          <AddCustomItem
+            placeholder={`Add ${label}...`}
+            onAdd={onAdd}
+            disabled={disabled}
+          />
         </div>
       )}
+    </div>
+  );
+}
+
+function AddCustomItem({
+  placeholder,
+  onAdd,
+  disabled,
+}: {
+  placeholder: string;
+  onAdd: (val: string) => void;
+  disabled: boolean;
+}) {
+  const [val, setVal] = useState("");
+  const handleAdd = () => {
+    if (val.trim()) {
+      onAdd(val.trim());
+      setVal("");
+    }
+  };
+  return (
+    <div className="flex items-center gap-1">
+      <Input
+        disabled={disabled}
+        placeholder={placeholder}
+        value={val}
+        onChange={(e) => setVal(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            handleAdd();
+          }
+        }}
+        className="h-7 text-[10px] bg-white"
+      />
+      <Button
+        disabled={disabled || !val.trim()}
+        size="icon"
+        variant="ghost"
+        onClick={handleAdd}
+        className="h-7 w-7 bg-slate-100 hover:bg-blue-50 hover:text-blue-600"
+      >
+        <Plus className="w-4 h-4" />
+      </Button>
     </div>
   );
 }
@@ -679,11 +946,11 @@ function QrDropzone({
   return (
     <div
       {...getRootProps()}
-      className="relative border-2 border-dashed rounded-2xl p-4 text-center cursor-pointer hover:bg-slate-50 transition-all border-slate-200 min-h-[180px] flex flex-col items-center justify-center"
+      className="relative border-2 border-dashed rounded-xl p-2 text-center cursor-pointer hover:bg-slate-50 transition-all border-slate-200 h-[160px] flex flex-col items-center justify-center bg-white"
     >
       <input {...getInputProps()} />
       {file || existingUrl ? (
-        <div className="relative w-full h-32 group">
+        <div className="relative w-full h-full group">
           <img
             src={file ? URL.createObjectURL(file) : existingUrl}
             className="w-full h-full object-contain rounded-lg"
@@ -693,16 +960,16 @@ function QrDropzone({
               e.stopPropagation();
               onRemove();
             }}
-            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 transition-colors z-10"
+            className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 shadow-lg hover:bg-red-600 z-10"
           >
             <X className="w-3 h-3" />
           </button>
         </div>
       ) : (
-        <div>
-          <Zap className="w-8 h-8 mb-2 mx-auto text-slate-300" />
-          <p className="text-[9px] font-black uppercase text-slate-400">
-            Upload QR Code
+        <div className="flex flex-col items-center">
+          <Zap className="w-6 h-6 mb-2 text-slate-300" />
+          <p className="text-[9px] font-bold text-slate-400 uppercase">
+            QR Code
           </p>
         </div>
       )}
