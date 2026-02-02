@@ -411,9 +411,9 @@ const CompanyManagerContent = () => {
                       onChange={(e) => setWebsite(e.target.value)}
                       className="font-black text-xs uppercase outline-none bg-transparent cursor-pointer text-gray-900 border-b-2 border-transparent focus:border-[#d11a2a] pb-1 transition-all"
                     >
-                      <option>Disruptive</option>
+                      <option>Disruptive Solutions Inc.</option>
                       <option>Ecoshift Corporation</option>
-                      <option>VAH</option>
+                      <option>Value Acquisitions Holdings</option>
                     </select>
                   </div>
 
