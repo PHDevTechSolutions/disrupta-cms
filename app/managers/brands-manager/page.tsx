@@ -16,7 +16,7 @@ import { cn } from "@/lib/utils";
 import { PageWrapper } from "@/components/sidebar/page-wrapper";
 
 // Website Options
-const WEBSITE_OPTIONS = ["Disruptive Solutions Inc.", "Ecoshift Corporation", "Value Acquisitions Holdings"];
+const WEBSITE_OPTIONS = ["Disruptive Solutions Inc", "Ecoshift Corporation", "Value Acquisitions Holdings"];
 
 export default function BrandsManager() {
   const [brands, setBrands] = useState<any[]>([]);

@@ -25,7 +25,7 @@ import { PageWrapper } from "@/components/sidebar/page-wrapper"
 import { cn } from "@/lib/utils"
 import { toast } from "sonner"
 
-const WEBSITE_OPTIONS = ["Disruptive Solutions Inc.", "Ecoshift Corporation", "Value Acquisitions Holdings"]
+const WEBSITE_OPTIONS = ["Disruptive Solutions Inc", "Ecoshift Corporation", "Value Acquisitions Holdings"]
 
 const SpecsManagerContent = () => {
   const [specs, setSpecs] = useState<any[]>([])

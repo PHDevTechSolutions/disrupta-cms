@@ -47,7 +47,7 @@ import {
 import { PageWrapper } from "@/components/sidebar/page-wrapper";
 import { cn } from "@/lib/utils";
 
-const WEBSITE_OPTIONS = ["Disruptive Solutions Inc.", "Ecoshift Corporation", "Value Acquisitions Holdings"];
+const WEBSITE_OPTIONS = ["Disruptive Solutions Inc", "Ecoshift Corporation", "Value Acquisitions Holdings"];
 
 export default function CategoryMaintenance() {
   const CLOUDINARY_UPLOAD_PRESET = "taskflow_preset"; 

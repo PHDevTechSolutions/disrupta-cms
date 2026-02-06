@@ -88,12 +88,23 @@ const data = {
           url: "/managers/careers-manager",
         },
         {
-          title: "Solutions Manager",
-          url: "/managers/solutions-manager",
-        },
-        {
           title: "Company Manager",
           url: "/managers/company-manager",
+        },
+      ],
+    },
+    {
+      title: "Solutions",
+      url: "/solutions",
+      icon: Settings2,
+      items: [
+        {
+          title: "Solutions Collection",
+          url: "/solutions/solutions-collection",
+        },
+        {
+          title: "Series",
+          url: "/solutions/series",
         },
       ],
     },
