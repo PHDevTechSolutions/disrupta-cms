@@ -14,6 +14,7 @@ import {
   query,
   where,
   getDocs,
+  getDoc, // Import getDoc from firebase/firestore
 } from "firebase/firestore";
 import {
   ImagePlus,
@@ -210,43 +211,56 @@ export default function AddNewProduct({
     }
 
     setSpecsLoading(true);
+    const unsubscribers: Array<() => void> = [];
+    const specIdsFromCategories = new Set<string>();
 
-    const unsubCategories = onSnapshot(
-      collection(db, "categoriesmaintenance"),
-      (snap) => {
-        const specIdsFromCategories = new Set<string>();
-        
-        snap.docs.forEach((doc) => {
-          const cat = doc.data();
-          if (selectedCats.includes(doc.id) && cat.specifications) {
-            cat.specifications.forEach((specId: string) => {
-              specIdsFromCategories.add(specId);
-            });
+    // Fetch each selected category to get their spec IDs
+    const fetchCategorySpecs = async () => {
+      try {
+        for (const catId of selectedCats) {
+          const catDoc = await getDoc(doc(db, "categoriesmaintenance", catId));
+          if (catDoc.exists()) {
+            const catData = catDoc.data();
+            if (catData.specifications && Array.isArray(catData.specifications)) {
+              console.log("[v0] Category", catId, "specs:", catData.specifications);
+              catData.specifications.forEach((specId: string) => {
+                specIdsFromCategories.add(specId);
+              });
+            }
           }
-        });
+        }
+
+        console.log("[v0] All spec IDs from categories:", Array.from(specIdsFromCategories));
 
         if (specIdsFromCategories.size === 0) {
+          console.log("[v0] No specs found for selected categories");
           setAvailableSpecs([]);
           setSpecsLoading(false);
           return;
         }
 
+        // Listen to the specs collection and filter by our collected IDs
         const unsubSpecs = onSnapshot(
           collection(db, "specs"),
           (specsSnap) => {
-            // Fetch ALL specs matching the category (no 10-item limit)
             const filteredSpecs = specsSnap.docs
               .filter((doc) => specIdsFromCategories.has(doc.id))
-              .map((doc) => ({
-                id: doc.id,
-                name: doc.data().name || "Unnamed",
-              }));
+              .map((doc) => {
+                const data = doc.data();
+                return {
+                  id: doc.id,
+                  name: data.name || "Unnamed",
+                };
+              });
+
+            console.log("[v0] Fetched specs:", filteredSpecs);
 
             const currentPending = pendingItemsRef.current
               .filter((p) => p.type === "spec")
               .map((p) => ({
                 id: `temp-${p.name}`,
                 name: p.name,
+                websites: selectedWebs,
                 isTemp: true,
               }));
 
@@ -255,12 +269,18 @@ export default function AddNewProduct({
           },
         );
 
-        return unsubSpecs;
-      },
-    );
+        unsubscribers.push(unsubSpecs);
+      } catch (error) {
+        console.error("[v0] Error fetching specs:", error);
+        setAvailableSpecs([]);
+        setSpecsLoading(false);
+      }
+    };
+
+    fetchCategorySpecs();
 
     return () => {
-      unsubCategories();
+      unsubscribers.forEach((unsub) => unsub());
       setSpecsLoading(false);
     };
   }, [selectedCats]);
@@ -951,7 +971,7 @@ export default function AddNewProduct({
                   </span>
                 </Label>
                 <Input
-                  className="h-10 text-xs border-slate-200 bg-slate-50 font-mono text-[#d11a2a] focus:ring-2 focus:ring-blue-500"
+                  className="h-10 text-xs border-slate-200 bg-slate-50 font-mono text-[#d11a2a] focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 text-sm"
                   placeholder="product-name-slug"
                   value={seoData.slug}
                   onChange={(e) => {
