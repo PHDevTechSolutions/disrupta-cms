@@ -143,15 +143,24 @@ const SpecsManagerContent = () => {
     )
   }
 
-  const getAvailableWebsites = () => {
+  const getAllAvailableWebsites = () => {
     const websites = new Set<string>()
-    selectedFamilies.forEach((familyId) => {
-      const family = productFamilies.find(f => f.id === familyId)
+    productFamilies.forEach((family) => {
       if (family?.websites && Array.isArray(family.websites)) {
         family.websites.forEach((website: string) => websites.add(website))
       }
     })
     return Array.from(websites).sort()
+  }
+
+  const getFilteredFamilies = () => {
+    if (selectedWebsites.length === 0) {
+      return productFamilies
+    }
+    return productFamilies.filter((family) => {
+      if (!family.websites || !Array.isArray(family.websites)) return false
+      return selectedWebsites.some((website) => family.websites.includes(website))
+    })
   }
 
   const toggleWebsite = (website: string) => {
@@ -317,19 +326,67 @@ const SpecsManagerContent = () => {
                 <div className="space-y-6">
                   <div className="flex items-center gap-2">
                     <Globe size={14} className="text-purple-600" />
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Website Filter (Optional)</label>
+                  </div>
+                  {familiesLoading ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader2 size={20} className="animate-spin text-purple-600" />
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-1 gap-3">
+                      <div
+                        onClick={() => setSelectedWebsites([])}
+                        className={cn(
+                          "flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all",
+                          selectedWebsites.length === 0 ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200"
+                        )}
+                      >
+                        <span className={cn("text-xs font-black uppercase italic tracking-tight", selectedWebsites.length === 0 ? "text-purple-900" : "text-gray-400")}>
+                          All Websites
+                        </span>
+                        <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", selectedWebsites.length === 0 ? "bg-purple-600 border-purple-600 shadow-lg shadow-purple-200" : "border-gray-200")}>
+                          {selectedWebsites.length === 0 && <Check size={14} className="text-white" strokeWidth={4} />}
+                        </div>
+                      </div>
+                      {getAllAvailableWebsites().map((website) => {
+                        const isActive = selectedWebsites.includes(website)
+                        return (
+                          <div
+                            key={website}
+                            onClick={() => toggleWebsite(website)}
+                            className={cn(
+                              "flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all",
+                              isActive ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200"
+                            )}
+                          >
+                            <span className={cn("text-xs font-black uppercase italic tracking-tight", isActive ? "text-purple-900" : "text-gray-400")}>
+                              {website}
+                            </span>
+                            <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", isActive ? "bg-purple-600 border-purple-600 shadow-lg shadow-purple-200" : "border-gray-200")}>
+                              {isActive && <Check size={14} className="text-white" strokeWidth={4} />}
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+                </div>
+                <div className="space-y-6 border-t border-gray-100 pt-6">
+                  <div className="flex items-center gap-2">
+                    <Globe size={14} className="text-purple-600" />
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Product Family Assignment</label>
                   </div>
                   {familiesLoading ? (
                     <div className="flex items-center justify-center py-8">
                       <Loader2 size={20} className="animate-spin text-purple-600" />
                     </div>
-                  ) : productFamilies.length === 0 ? (
+                  ) : getFilteredFamilies().length === 0 ? (
                     <div className="text-center py-8">
-                      <p className="text-[10px] font-black uppercase text-gray-300 tracking-widest">No product families found</p>
+                      <p className="text-[10px] font-black uppercase text-gray-300 tracking-widest">No product families found for selected websites</p>
                     </div>
                   ) : (
                     <div className="grid grid-cols-1 gap-3">
-                      {productFamilies.map((family) => {
+                      {getFilteredFamilies().map((family) => {
                         const isActive = selectedFamilies.includes(family.id);
                         return (
                           <div key={family.id} onClick={() => toggleFamily(family.id)} className={cn("flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all", isActive ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200")}>
@@ -343,42 +400,6 @@ const SpecsManagerContent = () => {
                     </div>
                   )}
                 </div>
-                {selectedFamilies.length > 0 && (
-                  <div className="space-y-6 border-t border-gray-100 pt-6">
-                    <div className="flex items-center gap-2">
-                      <Globe size={14} className="text-purple-600" />
-                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Website Filtering</label>
-                    </div>
-                    {getAvailableWebsites().length === 0 ? (
-                      <div className="text-center py-8">
-                        <p className="text-[10px] font-black uppercase text-gray-300 tracking-widest">No websites available for selected families</p>
-                      </div>
-                    ) : (
-                      <div className="grid grid-cols-1 gap-3">
-                        {getAvailableWebsites().map((website) => {
-                          const isActive = selectedWebsites.includes(website)
-                          return (
-                            <div
-                              key={website}
-                              onClick={() => toggleWebsite(website)}
-                              className={cn(
-                                "flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all",
-                                isActive ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200"
-                              )}
-                            >
-                              <span className={cn("text-xs font-black uppercase italic tracking-tight", isActive ? "text-purple-900" : "text-gray-400")}>
-                                {website}
-                              </span>
-                              <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", isActive ? "bg-purple-600 border-purple-600 shadow-lg shadow-purple-200" : "border-gray-200")}>
-                                {isActive && <Check size={14} className="text-white" strokeWidth={4} />}
-                              </div>
-                            </div>
-                          )
-                        })}
-                      </div>
-                    )}
-                  </div>
-                )}
               </div>
             </motion.div>
           </div>
