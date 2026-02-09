@@ -217,16 +217,24 @@ export default function AddNewProduct({
     // Fetch each selected category to get their spec IDs
     const fetchCategorySpecs = async () => {
       try {
+        console.log("[v0] Fetching specs for categories:", selectedCats);
         for (const catId of selectedCats) {
           const catDoc = await getDoc(doc(db, "categoriesmaintenance", catId));
+          console.log("[v0] Category doc exists?", catDoc.exists(), "catId:", catId);
           if (catDoc.exists()) {
             const catData = catDoc.data();
+            console.log("[v0] Full category data:", catData);
+            console.log("[v0] Specifications field:", catData?.specifications);
             if (catData.specifications && Array.isArray(catData.specifications)) {
               console.log("[v0] Category", catId, "specs:", catData.specifications);
               catData.specifications.forEach((specId: string) => {
                 specIdsFromCategories.add(specId);
               });
+            } else {
+              console.log("[v0] Category", catId, "has no specifications array");
             }
+          } else {
+            console.log("[v0] Category document not found:", catId);
           }
         }
 
