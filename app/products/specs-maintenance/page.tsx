@@ -323,49 +323,43 @@ const SpecsManagerContent = () => {
                     className="w-full text-4xl font-black uppercase italic outline-none border-b-4 border-gray-50 focus:border-purple-600 transition-all placeholder:text-gray-100 pb-2"
                   />
                 </div>
-                <div className="space-y-6">
+                <div className="space-y-4">
                   <div className="flex items-center gap-2">
                     <Globe size={14} className="text-purple-600" />
                     <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Website Filter (Optional)</label>
                   </div>
                   {familiesLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 size={20} className="animate-spin text-purple-600" />
+                    <div className="flex items-center justify-center py-4">
+                      <Loader2 size={16} className="animate-spin text-purple-600" />
                     </div>
                   ) : (
-                    <div className="grid grid-cols-1 gap-3">
-                      <div
+                    <div className="flex flex-wrap gap-2">
+                      <button
                         onClick={() => setSelectedWebsites([])}
                         className={cn(
-                          "flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all",
-                          selectedWebsites.length === 0 ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200"
+                          "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border",
+                          selectedWebsites.length === 0 
+                            ? "bg-purple-600 text-white border-purple-600 shadow-lg shadow-purple-200" 
+                            : "bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-200"
                         )}
                       >
-                        <span className={cn("text-xs font-black uppercase italic tracking-tight", selectedWebsites.length === 0 ? "text-purple-900" : "text-gray-400")}>
-                          All Websites
-                        </span>
-                        <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", selectedWebsites.length === 0 ? "bg-purple-600 border-purple-600 shadow-lg shadow-purple-200" : "border-gray-200")}>
-                          {selectedWebsites.length === 0 && <Check size={14} className="text-white" strokeWidth={4} />}
-                        </div>
-                      </div>
+                        All Websites
+                      </button>
                       {getAllAvailableWebsites().map((website) => {
                         const isActive = selectedWebsites.includes(website)
                         return (
-                          <div
+                          <button
                             key={website}
                             onClick={() => toggleWebsite(website)}
                             className={cn(
-                              "flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all",
-                              isActive ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200"
+                              "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border",
+                              isActive
+                                ? "bg-purple-600 text-white border-purple-600 shadow-lg shadow-purple-200"
+                                : "bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-200"
                             )}
                           >
-                            <span className={cn("text-xs font-black uppercase italic tracking-tight", isActive ? "text-purple-900" : "text-gray-400")}>
-                              {website}
-                            </span>
-                            <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", isActive ? "bg-purple-600 border-purple-600 shadow-lg shadow-purple-200" : "border-gray-200")}>
-                              {isActive && <Check size={14} className="text-white" strokeWidth={4} />}
-                            </div>
-                          </div>
+                            {website}
+                          </button>
                         )
                       })}
                     </div>
