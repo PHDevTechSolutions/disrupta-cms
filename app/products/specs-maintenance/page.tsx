@@ -35,6 +35,7 @@ const SpecsManagerContent = () => {
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [name, setName] = useState("")
   const [selectedFamilies, setSelectedFamilies] = useState<string[]>([])
+  const [selectedWebsites, setSelectedWebsites] = useState<string[]>([])
 
   useEffect(() => {
     const q = query(collection(db, "specs"), orderBy("createdAt", "desc"))
@@ -133,11 +134,29 @@ const SpecsManagerContent = () => {
     setEditingId(null)
     setName("")
     setSelectedFamilies([])
+    setSelectedWebsites([])
   }
 
   const toggleFamily = (familyId: string) => {
     setSelectedFamilies((prev) =>
       prev.includes(familyId) ? prev.filter((f) => f !== familyId) : [...prev, familyId]
+    )
+  }
+
+  const getAvailableWebsites = () => {
+    const websites = new Set<string>()
+    selectedFamilies.forEach((familyId) => {
+      const family = productFamilies.find(f => f.id === familyId)
+      if (family?.websites && Array.isArray(family.websites)) {
+        family.websites.forEach((website: string) => websites.add(website))
+      }
+    })
+    return Array.from(websites).sort()
+  }
+
+  const toggleWebsite = (website: string) => {
+    setSelectedWebsites((prev) =>
+      prev.includes(website) ? prev.filter((w) => w !== website) : [...prev, website]
     )
   }
 
@@ -324,6 +343,42 @@ const SpecsManagerContent = () => {
                     </div>
                   )}
                 </div>
+                {selectedFamilies.length > 0 && (
+                  <div className="space-y-6 border-t border-gray-100 pt-6">
+                    <div className="flex items-center gap-2">
+                      <Globe size={14} className="text-purple-600" />
+                      <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Website Filtering</label>
+                    </div>
+                    {getAvailableWebsites().length === 0 ? (
+                      <div className="text-center py-8">
+                        <p className="text-[10px] font-black uppercase text-gray-300 tracking-widest">No websites available for selected families</p>
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-3">
+                        {getAvailableWebsites().map((website) => {
+                          const isActive = selectedWebsites.includes(website)
+                          return (
+                            <div
+                              key={website}
+                              onClick={() => toggleWebsite(website)}
+                              className={cn(
+                                "flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all",
+                                isActive ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200"
+                              )}
+                            >
+                              <span className={cn("text-xs font-black uppercase italic tracking-tight", isActive ? "text-purple-900" : "text-gray-400")}>
+                                {website}
+                              </span>
+                              <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", isActive ? "bg-purple-600 border-purple-600 shadow-lg shadow-purple-200" : "border-gray-200")}>
+                                {isActive && <Check size={14} className="text-white" strokeWidth={4} />}
+                              </div>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </motion.div>
           </div>
