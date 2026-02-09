@@ -157,21 +157,14 @@ export default function AddNewProduct({
   // --- 1. FETCH MASTER DATA ---
   useEffect(() => {
     if (selectedWebs.length === 0) {
-      setAvailableSpecs([]);
       setAvailableCats([]);
       setAvailableBrands([]);
       setAvailableApps([]);
+      setAvailableSpecs([]);
       return;
     }
 
     const qFilter = where("websites", "array-contains-any", selectedWebs);
-
-    const unsubSpecs = onSnapshot(
-      query(collection(db, "specs"), qFilter),
-      (snap) => {
-        setAvailableSpecs((prev) => mergeWithPending(prev, snap, "spec"));
-      },
-    );
 
     const unsubCats = onSnapshot(
       query(collection(db, "categoriesmaintenance"), qFilter),
@@ -201,12 +194,50 @@ export default function AddNewProduct({
     );
 
     return () => {
-      unsubSpecs();
       unsubCats();
       unsubBrands();
       unsubApps();
     };
   }, [selectedWebs]);
+
+  // --- FETCH SPECS BASED ON SELECTED PRODUCT FAMILIES (CATEGORIES) ---
+  useEffect(() => {
+    if (selectedCats.length === 0) {
+      setAvailableSpecs([]);
+      return;
+    }
+
+    const unsubSpecs = onSnapshot(
+      collection(db, "specs"),
+      (snap) => {
+        const filteredSpecs = snap.docs
+          .filter((doc) => {
+            const productFamilies = doc.data().productFamilies || [];
+            return selectedCats.some((catId) => productFamilies.includes(catId));
+          })
+          .map((doc) => ({
+            id: doc.id,
+            name: doc.data().name || "Unnamed",
+            websites: doc.data().websites || [],
+          }));
+
+        const currentPending = pendingItemsRef.current
+          .filter((p) => p.type === "spec")
+          .map((p) => ({
+            id: `temp-${p.name}`,
+            name: p.name,
+            websites: [],
+            isTemp: true,
+          }));
+
+        setAvailableSpecs([...filteredSpecs, ...currentPending]);
+      },
+    );
+
+    return () => {
+      unsubSpecs();
+    };
+  }, [selectedCats]);
 
   // Helper to maintain local pending items in view
   const mergeWithPending = (
