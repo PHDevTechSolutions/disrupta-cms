@@ -98,6 +98,7 @@ export default function AddNewProduct({
 
   // MASTER DATA STATE
   const [availableSpecs, setAvailableSpecs] = useState<MasterItem[]>([]);
+  const [specsLoading, setSpecsLoading] = useState(false);
   const [availableCats, setAvailableCats] = useState<MasterItem[]>([]);
   const [availableBrands, setAvailableBrands] = useState<MasterItem[]>([]);
   const [availableApps, setAvailableApps] = useState<MasterItem[]>([]);
@@ -204,8 +205,11 @@ export default function AddNewProduct({
   useEffect(() => {
     if (selectedCats.length === 0) {
       setAvailableSpecs([]);
+      setSpecsLoading(false);
       return;
     }
+
+    setSpecsLoading(true);
 
     const unsubCategories = onSnapshot(
       collection(db, "categoriesmaintenance"),
@@ -223,12 +227,14 @@ export default function AddNewProduct({
 
         if (specIdsFromCategories.size === 0) {
           setAvailableSpecs([]);
+          setSpecsLoading(false);
           return;
         }
 
         const unsubSpecs = onSnapshot(
           collection(db, "specs"),
           (specsSnap) => {
+            // Fetch ALL specs matching the category (no 10-item limit)
             const filteredSpecs = specsSnap.docs
               .filter((doc) => specIdsFromCategories.has(doc.id))
               .map((doc) => ({
@@ -245,6 +251,7 @@ export default function AddNewProduct({
               }));
 
             setAvailableSpecs([...filteredSpecs, ...currentPending]);
+            setSpecsLoading(false);
           },
         );
 
@@ -254,6 +261,7 @@ export default function AddNewProduct({
 
     return () => {
       unsubCategories();
+      setSpecsLoading(false);
     };
   }, [selectedCats]);
 
@@ -766,7 +774,14 @@ export default function AddNewProduct({
                   />
                 </div>
 
-                {availableSpecs.length === 0 ? (
+                {specsLoading ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200 flex items-center justify-center gap-3">
+                    <Loader2 className="w-4 h-4 animate-spin text-blue-500" />
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">
+                      Loading specifications...
+                    </p>
+                  </div>
+                ) : availableSpecs.length === 0 ? (
                   <div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
                     <p className="text-[10px] font-bold text-slate-400 uppercase">
                       No specs available for selected category
