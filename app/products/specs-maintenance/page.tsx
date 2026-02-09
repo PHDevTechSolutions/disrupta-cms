@@ -14,12 +14,9 @@ import {
   updateDoc,
   serverTimestamp,
   getDocs,
-  arrayUnion,
   writeBatch,
 } from "firebase/firestore"
-import { 
-  Plus, Pencil, Trash2, Loader2, Save, Globe, Settings2, Check, Square, CheckSquare, X
-} from "lucide-react"
+import { Plus, Pencil, Trash2, Loader2, X } from "lucide-react"
 import { motion, AnimatePresence } from "framer-motion"
 import { PageWrapper } from "@/components/sidebar/page-wrapper"
 import { cn } from "@/lib/utils"
@@ -27,29 +24,16 @@ import { toast } from "sonner"
 
 const SpecsManagerContent = () => {
   const [specs, setSpecs] = useState<any[]>([])
-  const [productFamilies, setProductFamilies] = useState<any[]>([])
   const [isModalOpen, setIsModalOpen] = useState(false)
   const [loading, setLoading] = useState(false)
-  const [familiesLoading, setFamiliesLoading] = useState(true)
   const [editingId, setEditingId] = useState<string | null>(null)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [name, setName] = useState("")
-  const [selectedFamilies, setSelectedFamilies] = useState<string[]>([])
-  const [selectedWebsites, setSelectedWebsites] = useState<string[]>([])
 
   useEffect(() => {
     const q = query(collection(db, "specs"), orderBy("createdAt", "desc"))
     const unsubscribe = onSnapshot(q, (snapshot) => {
       setSpecs(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
-    })
-    return () => unsubscribe()
-  }, [])
-
-  useEffect(() => {
-    const q = query(collection(db, "categoriesmaintenance"), orderBy("createdAt", "desc"))
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      setProductFamilies(snapshot.docs.map((doc) => ({ id: doc.id, ...doc.data() })))
-      setFamiliesLoading(false)
     })
     return () => unsubscribe()
   }, [])
@@ -85,7 +69,6 @@ const SpecsManagerContent = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!name.trim()) return toast.error("Name is required")
-    if (selectedFamilies.length === 0) return toast.error("Select at least one product family")
 
     setLoading(true)
     try {
@@ -95,7 +78,6 @@ const SpecsManagerContent = () => {
       if (editingId) {
         await updateDoc(doc(db, "specs", editingId), {
           name: cleanName,
-          productFamilies: selectedFamilies,
           updatedAt: serverTimestamp(),
         })
       } else {
@@ -104,17 +86,11 @@ const SpecsManagerContent = () => {
         const existingDoc = snap.docs.find(d => d.data().name?.toLowerCase() === lowerName)
 
         if (existingDoc) {
-          // Merge product families if name matches regardless of casing
-          await updateDoc(doc(db, "specs", existingDoc.id), {
-            productFamilies: arrayUnion(...selectedFamilies),
-            updatedAt: serverTimestamp(),
-          })
-          toast.info(`Merged with existing spec: ${existingDoc.data().name}`)
+          toast.info(`Specification already exists: ${existingDoc.data().name}`)
         } else {
           // Create new
           await addDoc(collection(db, "specs"), {
             name: cleanName,
-            productFamilies: selectedFamilies,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp(),
           })
@@ -133,40 +109,6 @@ const SpecsManagerContent = () => {
   const resetForm = () => {
     setEditingId(null)
     setName("")
-    setSelectedFamilies([])
-    setSelectedWebsites([])
-  }
-
-  const toggleFamily = (familyId: string) => {
-    setSelectedFamilies((prev) =>
-      prev.includes(familyId) ? prev.filter((f) => f !== familyId) : [...prev, familyId]
-    )
-  }
-
-  const getAllAvailableWebsites = () => {
-    const websites = new Set<string>()
-    productFamilies.forEach((family) => {
-      if (family?.websites && Array.isArray(family.websites)) {
-        family.websites.forEach((website: string) => websites.add(website))
-      }
-    })
-    return Array.from(websites).sort()
-  }
-
-  const getFilteredFamilies = () => {
-    if (selectedWebsites.length === 0) {
-      return productFamilies
-    }
-    return productFamilies.filter((family) => {
-      if (!family.websites || !Array.isArray(family.websites)) return false
-      return selectedWebsites.some((website) => family.websites.includes(website))
-    })
-  }
-
-  const toggleWebsite = (website: string) => {
-    setSelectedWebsites((prev) =>
-      prev.includes(website) ? prev.filter((w) => w !== website) : [...prev, website]
-    )
   }
 
   return (
@@ -230,7 +172,6 @@ const SpecsManagerContent = () => {
                 </button>
               </th>
               <th className="px-8 py-6">Specification Name</th>
-              <th className="px-8 py-6 text-center">Product Families</th>
               <th className="px-8 py-6 text-right">Actions</th>
             </tr>
           </thead>
@@ -247,25 +188,12 @@ const SpecsManagerContent = () => {
                   <td className="px-8 py-6">
                     <h4 className="font-black text-gray-900 uppercase text-sm tracking-tight">{spec.name}</h4>
                   </td>
-                  <td className="px-8 py-6">
-                    <div className="flex flex-wrap justify-center gap-2">
-                      {spec.productFamilies?.map((familyId: string) => {
-                        const family = productFamilies.find(f => f.id === familyId)
-                        return (
-                          <span key={familyId} className="text-[9px] font-black uppercase tracking-widest px-3 py-1 bg-gray-100 text-gray-500 rounded-lg group-hover:bg-purple-50 group-hover:text-purple-600 transition-colors">
-                            {family?.title || familyId}
-                          </span>
-                        )
-                      })}
-                    </div>
-                  </td>
                   <td className="px-8 py-6 text-right">
                     <div className="flex justify-end gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
                       <button
                         onClick={() => {
                           setEditingId(spec.id)
                           setName(spec.name)
-                          setSelectedFamilies(spec.productFamilies || [])
                           setIsModalOpen(true)
                         }}
                         className="p-3 bg-gray-50 text-gray-400 hover:bg-black hover:text-white rounded-xl transition-all"
@@ -313,86 +241,15 @@ const SpecsManagerContent = () => {
                   </button>
                 </div>
               </div>
-              <div className="p-12 space-y-12 pb-32">
+              <div className="p-12 space-y-6 pb-12">
                 <div className="space-y-4">
                   <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Specification Name</label>
                   <input
                     value={name}
                     onChange={(e) => setName(e.target.value)}
                     placeholder="e.g. VOLTAGE INPUT"
-                    className="w-full text-4xl font-black uppercase italic outline-none border-b-4 border-gray-50 focus:border-purple-600 transition-all placeholder:text-gray-100 pb-2"
+                    className="w-full text-3xl font-black uppercase italic outline-none border-b-4 border-gray-50 focus:border-purple-600 transition-all placeholder:text-gray-100 pb-2"
                   />
-                </div>
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Globe size={14} className="text-purple-600" />
-                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Website Filter (Optional)</label>
-                  </div>
-                  {familiesLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                      <Loader2 size={16} className="animate-spin text-purple-600" />
-                    </div>
-                  ) : (
-                    <div className="flex flex-wrap gap-2">
-                      <button
-                        onClick={() => setSelectedWebsites([])}
-                        className={cn(
-                          "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border",
-                          selectedWebsites.length === 0 
-                            ? "bg-purple-600 text-white border-purple-600 shadow-lg shadow-purple-200" 
-                            : "bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-200"
-                        )}
-                      >
-                        All Websites
-                      </button>
-                      {getAllAvailableWebsites().map((website) => {
-                        const isActive = selectedWebsites.includes(website)
-                        return (
-                          <button
-                            key={website}
-                            onClick={() => toggleWebsite(website)}
-                            className={cn(
-                              "px-4 py-2 rounded-lg text-[9px] font-black uppercase tracking-widest transition-all border",
-                              isActive
-                                ? "bg-purple-600 text-white border-purple-600 shadow-lg shadow-purple-200"
-                                : "bg-gray-50 text-gray-400 border-gray-100 hover:border-gray-200"
-                            )}
-                          >
-                            {website}
-                          </button>
-                        )
-                      })}
-                    </div>
-                  )}
-                </div>
-                <div className="space-y-6 border-t border-gray-100 pt-6">
-                  <div className="flex items-center gap-2">
-                    <Globe size={14} className="text-purple-600" />
-                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-[0.2em]">Product Family Assignment</label>
-                  </div>
-                  {familiesLoading ? (
-                    <div className="flex items-center justify-center py-8">
-                      <Loader2 size={20} className="animate-spin text-purple-600" />
-                    </div>
-                  ) : getFilteredFamilies().length === 0 ? (
-                    <div className="text-center py-8">
-                      <p className="text-[10px] font-black uppercase text-gray-300 tracking-widest">No product families found for selected websites</p>
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-1 gap-3">
-                      {getFilteredFamilies().map((family) => {
-                        const isActive = selectedFamilies.includes(family.id);
-                        return (
-                          <div key={family.id} onClick={() => toggleFamily(family.id)} className={cn("flex items-center justify-between p-5 rounded-2xl border-2 cursor-pointer transition-all", isActive ? "border-purple-600 bg-purple-50/50" : "border-gray-50 bg-gray-50/30 hover:border-gray-200")}>
-                            <span className={cn("text-xs font-black uppercase italic tracking-tight", isActive ? "text-purple-900" : "text-gray-400")}>{family.title}</span>
-                            <div className={cn("w-6 h-6 rounded-full border-2 flex items-center justify-center transition-all", isActive ? "bg-purple-600 border-purple-600 shadow-lg shadow-purple-200" : "border-gray-200")}>
-                              {isActive && <Check size={14} className="text-white" strokeWidth={4} />}
-                            </div>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  )}
                 </div>
               </div>
             </motion.div>

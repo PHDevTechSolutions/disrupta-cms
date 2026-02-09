@@ -54,14 +54,18 @@ export default function CategoryMaintenance() {
   const CLOUDINARY_CLOUD_NAME = "dvmpn8mjh";
 
   const [categories, setCategories] = useState<any[]>([]);
+  const [specifications, setSpecifications] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [specsLoading, setSpecsLoading] = useState(false);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
+  const [specSearchTerm, setSpecSearchTerm] = useState("");
 
   // Form States
   const [editId, setEditId] = useState<string | null>(null);
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [selectedWebsites, setSelectedWebsites] = useState<string[]>([]);
+  const [selectedSpecs, setSelectedSpecs] = useState<string[]>([]);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState("");
 
@@ -72,6 +76,17 @@ export default function CategoryMaintenance() {
       const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
       setCategories(list);
       setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  useEffect(() => {
+    setSpecsLoading(true);
+    const q = query(collection(db, "specs"), orderBy("createdAt", "desc"));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const list = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+      setSpecifications(list);
+      setSpecsLoading(false);
     });
     return () => unsubscribe();
   }, []);
@@ -108,6 +123,8 @@ export default function CategoryMaintenance() {
     setTitle("");
     setDescription("");
     setSelectedWebsites([]);
+    setSelectedSpecs([]);
+    setSpecSearchTerm("");
     setImageFile(null);
     setPreviewUrl("");
   };
@@ -117,6 +134,7 @@ export default function CategoryMaintenance() {
     setTitle(cat.title);
     setDescription(cat.description);
     setSelectedWebsites(cat.websites || []);
+    setSelectedSpecs(cat.specifications || []);
     setPreviewUrl(cat.imageUrl);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -140,6 +158,7 @@ export default function CategoryMaintenance() {
         title: title.toUpperCase(),
         description,
         websites: selectedWebsites,
+        specifications: selectedSpecs,
         imageUrl: finalImageUrl,
         updatedAt: serverTimestamp(),
       };
@@ -240,6 +259,54 @@ export default function CategoryMaintenance() {
                     );
                   })}
                 </div>
+              </div>
+
+              {/* Specification Selector */}
+              <div className="space-y-3">
+                <label className="text-[10px] font-black uppercase text-slate-400 ml-1">Assign Specifications</label>
+                <Input
+                  type="text"
+                  placeholder="Search specifications..."
+                  value={specSearchTerm}
+                  onChange={(e) => setSpecSearchTerm(e.target.value)}
+                  className="rounded-xl h-10 text-[10px]"
+                />
+                {specsLoading ? (
+                  <div className="flex items-center justify-center py-6">
+                    <Loader2 className="animate-spin text-blue-600" size={20} />
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 gap-2 max-h-48 overflow-y-auto">
+                    {specifications
+                      .filter((spec) =>
+                        spec.name?.toLowerCase().includes(specSearchTerm.toLowerCase())
+                      )
+                      .map((spec) => {
+                        const isActive = selectedSpecs.includes(spec.id);
+                        return (
+                          <div
+                            key={spec.id}
+                            onClick={() =>
+                              setSelectedSpecs((prev) =>
+                                prev.includes(spec.id)
+                                  ? prev.filter((id) => id !== spec.id)
+                                  : [...prev, spec.id]
+                              )
+                            }
+                            className={cn(
+                              "flex items-center justify-between p-3 rounded-xl border-2 cursor-pointer transition-all",
+                              isActive ? "border-blue-600 bg-blue-50/30" : "border-slate-50 bg-slate-50/50 hover:border-slate-200"
+                            )}
+                          >
+                            <span className={cn("text-[10px] font-black uppercase italic", isActive ? "text-blue-900" : "text-slate-400")}>
+                              {spec.name}
+                            </span>
+                            {isActive && <Check size={14} className="text-blue-600" strokeWidth={4} />}
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
               </div>
 
               <div className="space-y-2">

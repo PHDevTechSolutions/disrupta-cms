@@ -200,42 +200,60 @@ export default function AddNewProduct({
     };
   }, [selectedWebs]);
 
-  // --- FETCH SPECS BASED ON SELECTED PRODUCT FAMILIES (CATEGORIES) ---
+  // --- FETCH SPECS BASED ON SELECTED CATEGORIES ---
   useEffect(() => {
     if (selectedCats.length === 0) {
       setAvailableSpecs([]);
       return;
     }
 
-    const unsubSpecs = onSnapshot(
-      collection(db, "specs"),
+    const unsubCategories = onSnapshot(
+      collection(db, "categoriesmaintenance"),
       (snap) => {
-        const filteredSpecs = snap.docs
-          .filter((doc) => {
-            const productFamilies = doc.data().productFamilies || [];
-            return selectedCats.some((catId) => productFamilies.includes(catId));
-          })
-          .map((doc) => ({
-            id: doc.id,
-            name: doc.data().name || "Unnamed",
-            websites: doc.data().websites || [],
-          }));
+        const specIdsFromCategories = new Set<string>();
+        
+        snap.docs.forEach((doc) => {
+          const cat = doc.data();
+          if (selectedCats.includes(doc.id) && cat.specifications) {
+            cat.specifications.forEach((specId: string) => {
+              specIdsFromCategories.add(specId);
+            });
+          }
+        });
 
-        const currentPending = pendingItemsRef.current
-          .filter((p) => p.type === "spec")
-          .map((p) => ({
-            id: `temp-${p.name}`,
-            name: p.name,
-            websites: [],
-            isTemp: true,
-          }));
+        if (specIdsFromCategories.size === 0) {
+          setAvailableSpecs([]);
+          return;
+        }
 
-        setAvailableSpecs([...filteredSpecs, ...currentPending]);
+        const unsubSpecs = onSnapshot(
+          collection(db, "specs"),
+          (specsSnap) => {
+            const filteredSpecs = specsSnap.docs
+              .filter((doc) => specIdsFromCategories.has(doc.id))
+              .map((doc) => ({
+                id: doc.id,
+                name: doc.data().name || "Unnamed",
+              }));
+
+            const currentPending = pendingItemsRef.current
+              .filter((p) => p.type === "spec")
+              .map((p) => ({
+                id: `temp-${p.name}`,
+                name: p.name,
+                isTemp: true,
+              }));
+
+            setAvailableSpecs([...filteredSpecs, ...currentPending]);
+          },
+        );
+
+        return unsubSpecs;
       },
     );
 
     return () => {
-      unsubSpecs();
+      unsubCategories();
     };
   }, [selectedCats]);
 
