@@ -16,10 +16,12 @@ type Solution = {
   websites: string[]
   series: string[]
   label: string
+  slug: string // Added slug at root level like blog manager
   seo: {
     title: string
     slug: string
     description: string
+    canonical?: string
   }
   createdAt?: any
 }
@@ -49,20 +51,12 @@ const SolutionsManagerContent = () => {
   const [selectedSeries, setSelectedSeries] = useState<string[]>([])
   const [label, setLabel] = useState("")
   
-  // SEO Specific States
-  const [seoTitle, setSeoTitle] = useState("")
-  const [seoSlug, setSeoSlug] = useState("")
-  const [seoDescription, setSeoDescription] = useState("")
-
-  // --- Auto-Slug & SEO Title Logic ---
-  useEffect(() => {
-    if (!editingId && title) {
-      if (!seoTitle) setSeoTitle(title)
-      if (!seoSlug) {
-        setSeoSlug(title.toLowerCase().replace(/[^\w ]+/g, "").replace(/ +/g, "-"))
-      }
-    }
-  }, [title, editingId])
+  // SEO Specific States - Updated structure to match blog manager
+  const [seoDataState, setSeoData] = useState({
+    title: "",
+    slug: "",
+    description: "",
+  })
 
   // --- Firebase Sync ---
   useEffect(() => {
@@ -95,10 +89,11 @@ const SolutionsManagerContent = () => {
         websites: selectedWebsites,
         series: selectedSeries,
         label,
+        slug: seoDataState.slug || title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-'), // Root level slug
         seo: {
-          title: seoTitle || title,
-          slug: seoSlug || title.toLowerCase().replace(/ /g, "-"),
-          description: seoDescription
+          title: seoDataState.title || title,
+          slug: seoDataState.slug || title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-'),
+          description: seoDataState.description,
         },
         updatedAt: serverTimestamp(),
       }
@@ -122,14 +117,26 @@ const SolutionsManagerContent = () => {
     setEditingId(null)
     setTitle(""); setDescription(""); setMainImage(""); setLabel("")
     setSelectedWebsites([]); setSelectedSeries([])
-    setSeoTitle(""); setSeoSlug(""); setSeoDescription("")
+    setSeoData({
+      title: "",
+      slug: "",
+      description: "",
+    })
   }
 
   const handleEditClick = (sol: Solution) => {
     setEditingId(sol.id)
-    setTitle(sol.title); setDescription(sol.description); setMainImage(sol.mainImage); setLabel(sol.label)
-    setSelectedWebsites(sol.websites || []); setSelectedSeries(sol.series || [])
-    setSeoTitle(sol.seo?.title || ""); setSeoSlug(sol.seo?.slug || ""); setSeoDescription(sol.seo?.description || "")
+    setTitle(sol.title)
+    setDescription(sol.description)
+    setMainImage(sol.mainImage)
+    setLabel(sol.label)
+    setSelectedWebsites(sol.websites || [])
+    setSelectedSeries(sol.series || [])
+    setSeoData({
+      title: sol.seo?.title || sol.title || "",
+      slug: sol.seo?.slug || sol.slug || "",
+      description: sol.seo?.description || "",
+    })
     setIsModalOpen(true)
   }
 
@@ -172,7 +179,7 @@ const SolutionsManagerContent = () => {
                     <img src={sol.mainImage} className="w-10 h-10 rounded-lg object-cover bg-gray-100" />
                     <div>
                       <h4 className="font-black text-gray-900 uppercase text-sm">{sol.title}</h4>
-                      <p className="text-[9px] text-gray-400 font-mono">/{sol.seo?.slug || "no-slug"}</p>
+                      <p className="text-[9px] text-gray-400 font-mono">/{sol.seo?.slug || sol.slug || "no-slug"}</p>
                     </div>
                   </td>
                   <td className="px-8 py-6">
@@ -249,7 +256,7 @@ const SolutionsManagerContent = () => {
                     </div>
                   </div>
 
-                  {/* Multi Selectors (Websites/Series) ... (Keep your original logic here) */}
+                  {/* Multi Selectors (Websites/Series) */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
                      <div className="space-y-4">
                         <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Target Websites</label>
@@ -276,22 +283,47 @@ const SolutionsManagerContent = () => {
                     <div className="space-y-1">
                       <div className="flex justify-between items-center">
                         <label className="text-[9px] font-black text-slate-500 uppercase">SEO Title</label>
-                        <span className={`text-[8px] font-bold ${seoTitle.length > 60 ? "text-red-500" : "text-emerald-500"}`}>{seoTitle.length}/60</span>
+                        <span className={`text-[8px] font-bold ${seoDataState.title.length > 60 ? "text-red-500" : "text-emerald-500"}`}>{seoDataState.title.length}/60</span>
                       </div>
-                      <input value={seoTitle} onChange={(e) => setSeoTitle(e.target.value)} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-emerald-500 outline-none" placeholder={title} />
+                      <input 
+                        value={seoDataState.title} 
+                        onChange={(e) => setSeoData({ ...seoDataState, title: e.target.value })} 
+                        className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:border-emerald-500 outline-none" 
+                        placeholder={title || "SEO title for search engines"} 
+                      />
                     </div>
 
                     <div className="space-y-1">
-                      <label className="text-[9px] font-black text-slate-500 uppercase">URL Slug</label>
-                      <input value={seoSlug} onChange={(e) => setSeoSlug(e.target.value.toLowerCase().replace(/\s+/g, "-"))} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-mono focus:border-emerald-500 outline-none" />
+                      <label className="text-[9px] font-black text-slate-500 uppercase flex items-center gap-2">
+                        URL Slug
+                        <span className="text-[9px] text-amber-600 font-semibold bg-amber-50 px-2 py-1 rounded">No slashes</span>
+                      </label>
+                      <input 
+                        value={seoDataState.slug} 
+                        onChange={(e) => {
+                          const sanitizedValue = e.target.value
+                            .toLowerCase()
+                            .replace(/\//g, "")
+                            .replace(/\s+/g, "-");
+                          setSeoData({ ...seoDataState, slug: sanitizedValue });
+                        }}
+                        className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm font-mono focus:border-emerald-500 outline-none" 
+                        placeholder={title.toLowerCase().replace(/[^\w ]+/g, '').replace(/ +/g, '-') || "e.g., solution-name"}
+                      />
                     </div>
 
                     <div className="space-y-1">
                       <div className="flex justify-between items-center">
                         <label className="text-[9px] font-black text-slate-500 uppercase">Meta Description</label>
-                        <span className={`text-[8px] font-bold ${seoDescription.length > 160 ? "text-red-500" : "text-emerald-500"}`}>{seoDescription.length}/160</span>
+                        <span className={`text-[8px] font-bold ${seoDataState.description.length > 160 ? "text-red-500" : "text-emerald-500"}`}>{seoDataState.description.length}/160</span>
                       </div>
-                      <textarea value={seoDescription} onChange={(e) => setSeoDescription(e.target.value)} rows={3} className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:border-emerald-500 outline-none" placeholder="Brief summary for search engines..." />
+                      <textarea 
+                        value={seoDataState.description} 
+                        onChange={(e) => setSeoData({ ...seoDataState, description: e.target.value })} 
+                        rows={3} 
+                        className="w-full px-4 py-2 bg-white border border-gray-200 rounded-lg text-sm resize-none focus:border-emerald-500 outline-none" 
+                        placeholder="Brief summary for search engines..." 
+                      />
                     </div>
                   </div>
                 </div>
@@ -307,21 +339,46 @@ const SolutionsManagerContent = () => {
                   </div>
 
                   <div className={`bg-white border border-gray-200 rounded-xl p-4 shadow-sm space-y-1 ${previewMode === "mobile" ? "max-w-[320px] mx-auto" : "w-full"}`}>
-                    <div className="text-[12px] text-[#202124] flex items-center gap-1 mb-1 truncate">
-                      <span>https://vah.com.ph</span>
-                      <span className="text-gray-400">› solutions › {seoSlug || "slug"}</span>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center overflow-hidden">
+                        <img
+                          src="/images/icon.png"
+                          alt="Site Icon"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                      <div className="overflow-hidden flex-1">
+                        <p className="text-[11px] text-[#202124] font-medium truncate">Value Acquisitions Holdings</p>
+                        <p className="text-[10px] text-[#4d5156] truncate">vah.com.ph › solutions › {seoDataState.slug || '...'}</p>
+                      </div>
                     </div>
-                    <h3 className="text-[18px] text-[#1a0dab] font-medium leading-tight hover:underline cursor-pointer line-clamp-2">
-                      {seoTitle || title || "SEO Title Preview"}
-                    </h3>
-                    <p className="text-[13px] text-[#4d5156] line-clamp-2 leading-snug">
-                      {seoDescription || "Provide a meta description to see how this solution appears in Google search results..."}
-                    </p>
-                    {mainImage && (
-                        <div className="mt-2 h-20 w-full rounded-lg overflow-hidden border border-gray-100">
-                           <img src={mainImage} className="w-full h-full object-cover" />
+
+                    <div className={`${previewMode === 'mobile' ? 'flex flex-col-reverse gap-2' : 'flex gap-3'}`}>
+                      <div className="flex-1 min-w-0">
+                        <a
+                          href={`https://vah.com.ph/solutions/${seoDataState.slug}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="hover:underline decoration-[#1a0dab]"
+                        >
+                          <h3 className="text-[16px] text-[#1a0dab] leading-tight mb-1 line-clamp-2 font-medium">
+                            {seoDataState.title || title || "Enter an SEO Title..."}
+                          </h3>
+                        </a>
+                        <p className="text-[12px] text-[#4d5156] line-clamp-2 leading-relaxed">
+                          {seoDataState.description || "Enter a meta description..."}
+                        </p>
+                      </div>
+
+                      {mainImage && (
+                        <div className={`bg-slate-50 rounded-lg overflow-hidden border border-slate-100 flex-shrink-0 ${previewMode === 'mobile' ? 'w-full h-32' : 'w-24 h-24'}`}>
+                          <img src={mainImage} className="w-full h-full object-cover" alt="Preview" />
                         </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               </div>

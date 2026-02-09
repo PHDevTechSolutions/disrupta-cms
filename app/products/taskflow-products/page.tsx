@@ -54,17 +54,16 @@ import { toast } from "sonner";
 import { PageWrapper } from "@/components/sidebar/page-wrapper";
 
 // SIGURADUHIN NA CAPITAL 'N' ANG FILENAME SA SIDEBAR MO
-import AddNewProduct from "@/components/products/add-product-form";
+import AddNewProduct from "@/components/products/taskflow-add-product-form";
 import { BulkUploadSection } from "@/components/products/bulk-upload";
 
-export default function AllProducts() {
+export default function TaskflowProducts() {
   const [products, setProducts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Filter States
+  // Filter States - No website filter needed (only taskflow)
   const [searchQuery, setSearchQuery] = useState("");
   const [brandFilter, setBrandFilter] = useState("All Brands");
-  const [websiteFilter, setWebsiteFilter] = useState("All Websites");
 
   // Pagination States
   const [currentPage, setCurrentPage] = useState(1);
@@ -105,7 +104,7 @@ export default function AllProducts() {
     return () => unsubscribe();
   }, []);
 
-  // --- 2. FILTER LOGIC ---
+  // --- 2. FILTER LOGIC - Always filters for taskflow ---
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
       const matchesBrand =
@@ -113,22 +112,27 @@ export default function AllProducts() {
         (Array.isArray(p.brands)
           ? p.brands.includes(brandFilter)
           : p.brand === brandFilter);
-      const matchesWeb =
-        websiteFilter === "All Websites" ||
-        (Array.isArray(p.websites)
-          ? p.websites.includes(websiteFilter)
-          : p.website === websiteFilter);
+      
+      // Always filter for taskflow website
+      const matchesTaskflow =
+        Array.isArray(p.websites)
+          ? p.websites.some((w: string) => 
+              w?.toLowerCase().includes("taskflow")
+            )
+          : p.website?.toLowerCase().includes("taskflow");
+      
       const matchesSearch =
         p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.itemCode?.toLowerCase().includes(searchQuery.toLowerCase());
-      return matchesBrand && matchesWeb && matchesSearch;
+      
+      return matchesBrand && matchesTaskflow && matchesSearch;
     });
-  }, [products, brandFilter, websiteFilter, searchQuery]);
+  }, [products, brandFilter, searchQuery]);
 
   // --- 3. PAGINATION LOGIC ---
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchQuery, brandFilter, websiteFilter]);
+  }, [searchQuery, brandFilter]);
 
   const totalPages = Math.ceil(filteredProducts.length / itemsPerPage);
 
@@ -270,7 +274,7 @@ export default function AllProducts() {
               onClick={handleBackToList}
               className="flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-blue-600"
             >
-              <ArrowLeft size={16} /> Back to Inventory
+              <ArrowLeft size={16} /> Back to Taskflow Inventory
             </Button>
             <div className="h-4 w-[1px] bg-slate-200" />
             <p className="text-[10px] font-black uppercase tracking-widest text-blue-600">
@@ -295,10 +299,10 @@ export default function AllProducts() {
         <div className="flex justify-between items-end mb-6">
           <div>
             <h2 className="text-3xl font-black uppercase italic tracking-tighter text-gray-900 flex items-center gap-2">
-              <Package className="text-blue-600" size={28} /> Inventory
+              <Package className="text-blue-600" size={28} /> Taskflow Inventory
             </h2>
             <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">
-              Manage and update your products
+              Manage products for Taskflow website
             </p>
           </div>
           <div className="flex gap-3">
@@ -352,19 +356,6 @@ export default function AllProducts() {
               </option>
             ))}
           </select>
-
-          <select
-            className="border rounded-xl px-4 py-2 text-xs font-bold uppercase tracking-wider bg-gray-50/50 border-gray-100 outline-none cursor-pointer"
-            value={websiteFilter}
-            onChange={(e) => setWebsiteFilter(e.target.value)}
-          >
-            <option>All Websites</option>
-            {uniqueWebsites.map((web, index) => (
-              <option key={`${web}-${index}`} value={web}>
-                {web}
-              </option>
-            ))}
-          </select>
         </div>
 
         {/* TABLE */}
@@ -415,7 +406,7 @@ export default function AllProducts() {
                     colSpan={7}
                     className="h-60 text-center text-[10px] text-gray-400 font-bold uppercase tracking-[0.2em]"
                   >
-                    No products found
+                    No taskflow products found
                   </TableCell>
                 </TableRow>
               ) : (

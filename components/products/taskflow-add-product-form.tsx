@@ -21,15 +21,12 @@ import {
   X,
   Loader2,
   AlignLeft,
-  Globe,
   Tag,
   Factory,
   LayoutGrid,
   Zap,
   Plus,
   Images,
-  Link as LinkIcon,
-  Search,
 } from "lucide-react";
 
 // UI Components
@@ -60,23 +57,7 @@ interface SpecValue {
   value: string;
 }
 
-const WEBSITE_OPTIONS = [
-  "Ecoshift Corporation",
-  "Disruptive Solutions Inc",
-  "Value Acquisitions Holdings",
-];
-
-const WEBSITE_PRODUCT_PATH: Record<string, string> = {
-  "Ecoshift Corporation": "/products",
-  "Disruptive Solutions Inc.": "/products",
-  "Value Acquisitions Holdings": "/solutions",
-};
-
-const WEBSITE_DOMAINS: Record<string, string> = {
-  "Ecoshift Corporation": "https://ecoshift-website.vercel.app",
-  "Disruptive Solutions Inc.": "https://disruptive-solutions-inc.vercel.app",
-  "Value Acquisitions Holdings": "https://vah.com.ph",
-};
+const DEFAULT_WEBSITE = "Taskflow";
 
 export default function AddNewProduct({
   editData,
@@ -108,7 +89,7 @@ export default function AddNewProduct({
   const pendingItemsRef = useRef<PendingItem[]>([]);
 
   // SELECTIONS - NOW USING IDs
-  const [selectedWebs, setSelectedWebs] = useState<string[]>([]);
+  const selectedWebs = [DEFAULT_WEBSITE]; // Always use default website
   const [selectedCats, setSelectedCats] = useState<string[]>([]); // Store category IDs
   const [selectedBrands, setSelectedBrands] = useState<string[]>([]);
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
@@ -125,47 +106,8 @@ export default function AddNewProduct({
   );
   const [existingQrImage, setExistingQrImage] = useState("");
 
-  // SEO DATA
-  const [seoData, setSeoData] = useState({
-    title: editData?.seo?.title || "",
-    description: editData?.seo?.description || "",
-    slug: editData?.slug || "",
-    canonical: editData?.seo?.canonical || "",
-    ogImage: editData?.seo?.ogImage || "",
-    robots: editData?.seo?.robots || "index, follow",
-  });
-  const [previewMode, setPreviewMode] = useState<"mobile" | "desktop">(
-    "desktop",
-  );
-
-  // --- AUTO-UPDATE CANONICAL BASED ON WEBSITE ---
-  useEffect(() => {
-    if (!seoData.slug || selectedWebs.length === 0) return;
-
-    const website = selectedWebs[0];
-    const domain = WEBSITE_DOMAINS[website];
-    const path = WEBSITE_PRODUCT_PATH[website] ?? "/products";
-
-    if (!domain) return;
-
-    const nextCanonical = `${domain}${path}/${seoData.slug}`;
-
-    setSeoData((prev) => {
-      if (prev.canonical === nextCanonical) return prev;
-      return { ...prev, canonical: nextCanonical };
-    });
-  }, [selectedWebs, seoData.slug]);
-
   // --- 1. FETCH MASTER DATA ---
   useEffect(() => {
-    if (selectedWebs.length === 0) {
-      setAvailableCats([]);
-      setAvailableBrands([]);
-      setAvailableApps([]);
-      setAvailableSpecs([]);
-      return;
-    }
-
     const qFilter = where("websites", "array-contains-any", selectedWebs);
 
     const unsubCats = onSnapshot(
@@ -200,7 +142,7 @@ export default function AddNewProduct({
       unsubBrands();
       unsubApps();
     };
-  }, [selectedWebs]);
+  }, []);
 
   // --- FETCH SPECS BASED ON SELECTED CATEGORIES ---
   useEffect(() => {
@@ -309,7 +251,7 @@ export default function AddNewProduct({
       unsubscribers.forEach((unsub) => unsub());
       setSpecsLoading(false);
     };
-  }, [selectedCats, selectedWebs]);
+  }, [selectedCats]);
 
   // Helper to maintain local pending items in view
   const mergeWithPending = (
@@ -347,13 +289,6 @@ export default function AddNewProduct({
       setItemCode(editData.itemCode || "");
       setRegPrice(editData.regularPrice?.toString() || "");
       setSalePrice(editData.salePrice?.toString() || "");
-      setSelectedWebs(
-        Array.isArray(editData.website)
-          ? editData.website
-          : editData.website
-            ? [editData.website]
-            : [],
-      );
       // Store category ID directly
       setSelectedCats(editData.category ? [editData.category] : []);
       setSelectedBrands(editData.brand ? [editData.brand] : []);
@@ -442,8 +377,8 @@ export default function AddNewProduct({
   };
 
   const handlePublish = async () => {
-    if (!productName || selectedWebs.length === 0)
-      return toast.error("Please select at least one website and name!");
+    if (!productName)
+      return toast.error("Please enter a product name!");
 
     setIsPublishing(true);
     const publishToast = toast.loading("Validating...");
@@ -535,7 +470,6 @@ export default function AddNewProduct({
       const payload = {
         name: productName,
         shortDescription: shortDesc,
-        slug: seoData.slug,
         itemCode: itemCode,
         regularPrice: Number(regPrice) || 0,
         salePrice: Number(salePrice) || 0,
@@ -547,14 +481,6 @@ export default function AddNewProduct({
         category: selectedCats[0] ? resolveCategoryId(selectedCats[0]) : "",
         brand: selectedBrands[0] ? resolveBrandId(selectedBrands[0]) : "",
         applications: resolveAppIds(selectedApps),
-        seo: {
-          title: seoData.title || productName,
-          description: seoData.description,
-          canonical: seoData.canonical,
-          ogImage: seoData.ogImage || mainUrl,
-          robots: seoData.robots,
-          lastUpdated: new Date().toISOString(),
-        },
         updatedAt: serverTimestamp(),
       };
 
@@ -596,48 +522,9 @@ export default function AddNewProduct({
     getInputProps: getGalleryInputProps,
   } = useDropzone({ onDrop: onDropGallery });
 
-  const toggleWebsite = (web: string) => {
-    setSelectedWebs((prev) =>
-      prev.includes(web) ? prev.filter((w) => w !== web) : [...prev, web],
-    );
-  };
-
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-6 p-4 bg-slate-50 min-h-screen">
       <div className="md:col-span-2 space-y-6">
-        {/* WEBSITES CARD */}
-        <Card className="shadow-sm border-none ring-2 ring-blue-500/20">
-          <CardHeader className="pb-3">
-            <CardTitle className="text-[10px] font-black uppercase text-blue-600 tracking-widest flex items-center gap-2">
-              <Globe className="w-4 h-4" /> Targeted Websites
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-3">
-            {WEBSITE_OPTIONS.map((web) => (
-              <div
-                key={web}
-                onClick={() => toggleWebsite(web)}
-                className={`flex-1 min-w-[180px] p-4 rounded-xl border-2 transition-all cursor-pointer flex justify-between items-center ${
-                  selectedWebs.includes(web)
-                    ? "border-blue-500 bg-blue-50 ring-4 ring-blue-500/5"
-                    : "border-slate-100 bg-white hover:border-slate-200"
-                }`}
-              >
-                <span
-                  className={`text-[11px] font-black uppercase ${
-                    selectedWebs.includes(web)
-                      ? "text-blue-700"
-                      : "text-slate-500"
-                  }`}
-                >
-                  {web}
-                </span>
-                <Checkbox checked={selectedWebs.includes(web)} />
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
         {/* UNIFIED MEDIA ASSETS CARD */}
         <Card className="shadow-sm border-none ring-1 ring-slate-200">
           <CardHeader>
@@ -831,7 +718,7 @@ export default function AddNewProduct({
                     onAdd={(name) =>
                       handleAddItem("spec", name, "specs", "name")
                     }
-                    disabled={selectedWebs.length === 0}
+                    disabled={false}
                   />
                 </div>
 
@@ -902,7 +789,7 @@ export default function AddNewProduct({
               icon={<Tag className="w-3 h-3" />}
               items={availableCats}
               selected={selectedCats}
-              disabled={selectedWebs.length === 0}
+              disabled={false}
               onToggle={(id: string) =>
                 setSelectedCats((prev) =>
                   prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
@@ -917,7 +804,7 @@ export default function AddNewProduct({
               icon={<Factory className="w-3 h-3" />}
               items={availableBrands}
               selected={selectedBrands}
-              disabled={selectedWebs.length === 0}
+              disabled={false}
               onToggle={(id: string) =>
                 setSelectedBrands((prev) =>
                   prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id],
@@ -932,7 +819,7 @@ export default function AddNewProduct({
               icon={<LayoutGrid className="w-3 h-3" />}
               items={availableApps}
               selected={selectedApps}
-              disabled={selectedWebs.length === 0}
+              disabled={false}
               onToggle={(id: string) =>
                 setSelectedApps((prev) =>
                   prev.includes(id) ? prev.filter((a) => a !== id) : [...prev, id],
@@ -981,184 +868,8 @@ export default function AddNewProduct({
           </div>
         </Card>
 
-        {/* SEO SECTION */}
-        <Card className="border-none ring-1 ring-slate-200 shadow-sm">
-          <CardHeader className="bg-slate-50/50 py-3 border-b">
-            <CardTitle className="flex items-center gap-2 text-slate-700 font-black text-xs uppercase tracking-widest">
-              <Search className="w-4 h-4 text-blue-500" /> SEO Settings
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="p-6 space-y-5">
-            {/* INPUT SECTION */}
-            <div className="space-y-4 border-b border-slate-100 pb-6">
-              <div className="space-y-1.5">
-                <Label className="text-slate-500 font-bold text-xs uppercase">
-                  SEO Title
-                </Label>
-                <Input
-                  className="h-10 text-xs border-slate-200 bg-slate-50 focus:ring-2 focus:ring-blue-500"
-                  placeholder="Product name for Google"
-                  value={seoData.title}
-                  onChange={(e) =>
-                    setSeoData((prev) => ({ ...prev, title: e.target.value }))
-                  }
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-slate-500 font-bold text-xs uppercase flex justify-between">
-                  URL Slug
-                  <span className="text-[10px] text-amber-600 normal-case font-medium">
-                    Forward slash (/) is not allowed
-                  </span>
-                </Label>
-                <Input
-                  className="h-10 text-xs border-slate-200 bg-slate-50 font-mono text-[#d11a2a] focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 text-sm"
-                  placeholder="product-name-slug"
-                  value={seoData.slug}
-                  onChange={(e) => {
-                    const sanitized = e.target.value
-                      .toLowerCase()
-                      .replace(/\//g, "")
-                      .replace(/\s+/g, "-");
-                    setSeoData((prev) => ({ ...prev, slug: sanitized }));
-                  }}
-                />
-              </div>
-              <div className="space-y-1.5">
-                <Label className="text-slate-500 font-bold text-xs uppercase">
-                  Meta Description
-                </Label>
-                <textarea
-                  rows={3}
-                  className="w-full px-3 py-2 bg-slate-50 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-slate-700 text-sm"
-                  placeholder="Brief summary for search results..."
-                  value={seoData.description}
-                  onChange={(e) =>
-                    setSeoData((prev) => ({
-                      ...prev,
-                      description: e.target.value,
-                    }))
-                  }
-                />
-              </div>
-            </div>
-
-            {/* LIVE PREVIEW SECTION */}
-            <div className="pt-2">
-              <div className="flex items-center gap-6 mb-4">
-                <span className="text-[10px] font-black uppercase text-slate-400">
-                  Google Preview:
-                </span>
-                <div className="flex gap-4">
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600">
-                    <input
-                      type="radio"
-                      name="view"
-                      checked={previewMode === "mobile"}
-                      onChange={() => setPreviewMode("mobile")}
-                      className="text-blue-500"
-                    />
-                    Mobile
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer text-xs font-bold text-slate-600">
-                    <input
-                      type="radio"
-                      name="view"
-                      checked={previewMode === "desktop"}
-                      onChange={() => setPreviewMode("desktop")}
-                      className="text-blue-500"
-                    />
-                    Desktop
-                  </label>
-                </div>
-              </div>
-
-              {/* CANONICAL URL DISPLAY */}
-              {seoData.canonical && (
-                <div className="mb-3 p-3 bg-blue-50 border border-blue-100 rounded-lg">
-                  <p className="text-[10px] font-bold text-blue-600 uppercase mb-1">
-                    Canonical URL
-                  </p>
-                  <p className="text-xs text-blue-700 font-mono break-all">
-                    {seoData.canonical}
-                  </p>
-                </div>
-              )}
-
-              {/* Google Card Simulation */}
-              <div
-                className={`p-4 bg-white border border-slate-200 rounded-xl shadow-sm transition-all duration-300 ${
-                  previewMode === "mobile" ? "max-w-[360px]" : "max-w-[600px]"
-                }`}
-              >
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-6 h-6 bg-slate-100 rounded-full flex items-center justify-center border border-slate-100">
-                    <LinkIcon className="w-3 h-3 text-slate-400" />
-                  </div>
-                  <div className="overflow-hidden">
-                    <p className="text-[12px] text-[#202124] leading-tight font-medium">
-                      {selectedWebs.length > 0
-                        ? `${WEBSITE_DOMAINS[selectedWebs[0]]
-                            ?.replace("https://", "")
-                            .replace("http://", "")} › ${
-                            WEBSITE_PRODUCT_PATH[selectedWebs[0]]?.replace(
-                              "/",
-                              "",
-                            ) || "products"
-                          } › ${seoData.slug || "..."}`
-                        : "No website selected"}
-                    </p>
-                  </div>
-                </div>
-
-                <div
-                  className={`mt-2 ${previewMode === "mobile" ? "flex flex-col-reverse gap-2" : "flex gap-4"}`}
-                >
-                  <div className="flex-1">
-                    <a
-                      href="#"
-                      onClick={(e) => e.preventDefault()}
-                      className="text-[18px] text-[#1a0dab] hover:underline cursor-pointer leading-tight mb-1 line-clamp-2 font-medium block"
-                    >
-                      {seoData.title || "Enter an SEO Title..."}
-                    </a>
-                    <p className="text-[13px] text-[#4d5156] line-clamp-3 leading-relaxed">
-                      {seoData.description ||
-                        "Enter a meta description to see how it looks here. This text will help customers find your product on Google."}
-                    </p>
-                  </div>
-
-                  {/* THUMBNAIL PREVIEW */}
-                  <div className="w-[104px] h-[104px] flex-shrink-0 bg-slate-50 rounded-lg overflow-hidden border border-slate-100 relative group">
-                    {mainImage || existingMainImage ? (
-                      <img
-                        src={
-                          mainImage
-                            ? URL.createObjectURL(mainImage)
-                            : existingMainImage
-                        }
-                        className="w-full h-full object-contain p-1"
-                        alt="SEO Preview"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex flex-col items-center justify-center opacity-20">
-                        <Images size={24} />
-                      </div>
-                    )}
-                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
-                      <span className="text-[8px] text-white font-black uppercase">
-                        Preview Only
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
         <Button
-          disabled={isPublishing || selectedWebs.length === 0}
+          disabled={isPublishing}
           onClick={handlePublish}
           className="w-full bg-[#d11a2a] hover:bg-[#b01622] h-16 rounded-2xl font-black uppercase tracking-widest text-white shadow-xl shadow-red-200 active:scale-95 transition-all"
         >

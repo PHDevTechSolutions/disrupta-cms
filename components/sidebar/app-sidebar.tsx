@@ -25,7 +25,6 @@ const data = {
   navMain: [
     {
       title: "Inquiries",
-      url: "/inquiries",
       icon: FileText,
       isActive: true,
       items: [
@@ -45,12 +44,15 @@ const data = {
     },
     {
       title: "Products",
-      url: "/products",
       icon: Package,
       items: [
         {
-          title: "Products",
+          title: "Website Products",
           url: "/products/all-products",
+        },
+        {
+          title: "Taskflow Products",
+          url: "/products/taskflow-products",
         },
         {
           title: "Orders",
@@ -72,7 +74,6 @@ const data = {
     },
     {
       title: "Managers",
-      url: "/managers",
       icon: Settings2,
       items: [
         {
@@ -95,7 +96,6 @@ const data = {
     },
     {
       title: "Solutions",
-      url: "/solutions",
       icon: Settings2,
       items: [
         {
@@ -108,7 +108,7 @@ const data = {
         },
       ],
     },
-  ],
+  ] as const,
   navSecondary: [
     {
       title: "Support",
@@ -139,7 +139,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         </SidebarMenu>
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={data.navMain} />
+        <NavMain items={data.navMain as any} />
         <NavSecondary items={data.navSecondary} className="mt-auto" />
       </SidebarContent>
       <SidebarFooter>

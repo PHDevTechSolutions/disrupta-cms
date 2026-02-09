@@ -33,7 +33,7 @@ interface SpecValue {
 interface BulkRow {
   name: string;
   shortDescription?: string;
-  sku?: string;
+  itemCode?: string;
   regularPrice?: string | number;
   salePrice?: string | number;
   website?: string;
@@ -128,7 +128,7 @@ export function BulkUploadSection({ onUploadComplete }: { onUploadComplete?: () 
         rows = worksheet.getSheetValues().slice(2).filter(r => r !== undefined).map((r: any) => ({
           name: getCellValue(r[1]).trim(),
           shortDescription: getCellValue(r[2]),
-          sku: getCellValue(r[3]),
+          itemCode: getCellValue(r[3]),
           regularPrice: r[4],
           salePrice: r[5],
           website: getCellValue(r[6]),
@@ -194,7 +194,7 @@ export function BulkUploadSection({ onUploadComplete }: { onUploadComplete?: () 
         await addDoc(collection(db, "products"), {
           name: row.name,
           shortDescription: row.shortDescription || "",
-          sku: row.sku || "",
+          itemCode: row.itemCode || "",
           regularPrice: Number(row.regularPrice) || 0,
           salePrice: Number(row.salePrice) || 0,
           website: rowWebsites,
