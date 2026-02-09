@@ -699,64 +699,66 @@ export default function AddNewProduct({
               />
             </div>
 
-            {/* SPECS SECTION */}
-            <div className="pt-6 border-t border-slate-100">
-              <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-amber-500" />
-                  <Label className="text-[11px] font-black uppercase text-slate-500">
-                    Technical Specifications
-                  </Label>
+            {/* SPECS SECTION - Only shown when category is selected */}
+            {selectedCats.length > 0 && (
+              <div className="pt-6 border-t border-slate-100">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-amber-500" />
+                    <Label className="text-[11px] font-black uppercase text-slate-500">
+                      Technical Specifications
+                    </Label>
+                  </div>
+                  {/* Add Custom Spec Button */}
+                  <AddCustomItem
+                    placeholder="New Spec Name..."
+                    onAdd={(name) => handleAddItem("spec", name, "specs", "name")}
+                    disabled={selectedWebs.length === 0}
+                  />
                 </div>
-                {/* Add Custom Spec Button */}
-                <AddCustomItem
-                  placeholder="New Spec Name..."
-                  onAdd={(name) => handleAddItem("spec", name, "specs", "name")}
-                  disabled={selectedWebs.length === 0}
-                />
-              </div>
 
-              {selectedWebs.length === 0 ? (
-                <div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
-                  <p className="text-[10px] font-bold text-slate-400 uppercase">
-                    Select websites to load specs
-                  </p>
-                </div>
-              ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  {availableSpecs.map((spec) => (
-                    <div
-                      key={spec.id}
-                      className={`space-y-1 bg-white p-3 rounded-xl border shadow-sm ${
-                        spec.isTemp
-                          ? "border-amber-200 ring-2 ring-amber-50"
-                          : "border-slate-100"
-                      }`}
-                    >
-                      <Label className="text-[10px] font-black uppercase text-slate-500 flex justify-between">
-                        {spec.name}
-                        {spec.isTemp && (
-                          <span className="text-amber-500 text-[8px]">
-                            (New)
-                          </span>
-                        )}
-                      </Label>
-                      <Input
-                        placeholder={`Enter ${spec.name}...`}
-                        className="h-9 text-xs border-none bg-slate-50 font-medium"
-                        value={specValues[spec.name] || ""}
-                        onChange={(e) =>
-                          setSpecValues((prev) => ({
-                            ...prev,
-                            [spec.name]: e.target.value,
-                          }))
-                        }
-                      />
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
+                {availableSpecs.length === 0 ? (
+                  <div className="p-8 text-center bg-slate-50 rounded-2xl border-2 border-dashed border-slate-200">
+                    <p className="text-[10px] font-bold text-slate-400 uppercase">
+                      No specs available for selected category
+                    </p>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {availableSpecs.map((spec) => (
+                      <div
+                        key={spec.id}
+                        className={`space-y-1 bg-white p-3 rounded-xl border shadow-sm ${
+                          spec.isTemp
+                            ? "border-amber-200 ring-2 ring-amber-50"
+                            : "border-slate-100"
+                        }`}
+                      >
+                        <Label className="text-[10px] font-black uppercase text-slate-500 flex justify-between">
+                          {spec.name}
+                          {spec.isTemp && (
+                            <span className="text-amber-500 text-[8px]">
+                              (New)
+                            </span>
+                          )}
+                        </Label>
+                        <Input
+                          placeholder={`Enter ${spec.name}...`}
+                          className="h-9 text-xs border-none bg-slate-50 font-medium"
+                          value={specValues[spec.name] || ""}
+                          onChange={(e) =>
+                            setSpecValues((prev) => ({
+                              ...prev,
+                              [spec.name]: e.target.value,
+                            }))
+                          }
+                        />
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>
