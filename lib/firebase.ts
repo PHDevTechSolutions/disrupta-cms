@@ -6,13 +6,13 @@ import { getAuth } from "firebase/auth"; // ✅ ADD THIS
 const firebaseConfig = {
   apiKey: "AIzaSyCNonSOohWCFdgL052XUFFZTH1orbP2dH4",
   authDomain: "taskflow-4605f.firebaseapp.com",
+  databaseURL: "https://taskflow-4605f-default-rtdb.asia-southeast1.firebasedatabase.app",
   projectId: "taskflow-4605f",
   storageBucket: "taskflow-4605f.firebasestorage.app",
   messagingSenderId: "558742255762",
   appId: "1:558742255762:web:5725b5c26f1c6fae9e8e4b",
-  measurementId: "G-9J1LXQ8YZC",
+  measurementId: "G-9J1LXQ8YZC"
 };
-
 const app = !getApps().length ? initializeApp(firebaseConfig) : getApps()[0];
 
 export const db = getFirestore(app);

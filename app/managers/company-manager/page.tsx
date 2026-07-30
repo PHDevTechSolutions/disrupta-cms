@@ -38,6 +38,7 @@ type Company = {
   keyFeatures: string[]
   partnersImage: string[]
   website: string
+  link?: string
   createdAt?: any
 }
 
@@ -51,6 +52,7 @@ const CompanyManagerContent = () => {
   const [companyName, setCompanyName] = useState("")
   const [description, setDescription] = useState("")
   const [website, setWebsite] = useState("Disruptive")
+  const [link, setLink] = useState("")
   const [mainImage, setMainImage] = useState<File | null>(null)
   const [mainImagePrev, setMainImagePrev] = useState<string | null>(null)
   
@@ -168,6 +170,7 @@ const CompanyManagerContent = () => {
         companyName,
         description,
         website,
+        link,
         mainImage: finalMainImage,
         services: filteredServices,
         keyFeatures: filteredFeatures,
@@ -196,6 +199,7 @@ const CompanyManagerContent = () => {
     setCompanyName("")
     setDescription("")
     setWebsite("Disruptive")
+    setLink("")
     setMainImage(null)
     setMainImagePrev(null)
     setServices([""])
@@ -209,6 +213,7 @@ const CompanyManagerContent = () => {
     setCompanyName(company.companyName)
     setDescription(company.description)
     setWebsite(company.website || "Disruptive")
+    setLink(company.link || "")
     setMainImagePrev(company.mainImage || null)
     setServices(company.services && company.services.length > 0 ? company.services : [""])
     setKeyFeatures(company.keyFeatures && company.keyFeatures.length > 0 ? company.keyFeatures : [""])
@@ -417,6 +422,17 @@ const CompanyManagerContent = () => {
                     </select>
                   </div>
 
+                  {/* LINK FIELD */}
+                  <div className="space-y-4">
+                    <label className="text-[10px] font-black uppercase text-gray-400 tracking-widest">Company Website Link</label>
+                    <input
+                      value={link}
+                      onChange={(e) => setLink(e.target.value)}
+                      placeholder="https://example.com"
+                      className="w-full text-sm outline-none border-2 border-gray-50 focus:border-[#d11a2a] transition-all bg-gray-50 p-4 rounded-2xl"
+                    />
+                  </div>
+
                   {/* MAIN IMAGE UPLOAD */}
                   <div className="space-y-4">
                     <label className="text-[10px] font-black uppercase text-gray-400 flex items-center gap-2">
@@ -548,7 +564,7 @@ const CompanyManagerContent = () => {
 
                     {/* IMAGE GRID PREVIEW */}
                     {partnersImagePrev.length > 0 && (
-                      <div className="grid grid-cols-4 sm:grid-cols-5 gap-4 mt-4">
+                      <div className="flex flex-wrap gap-4 mt-4">
                         {partnersImagePrev.map((preview, idx) => (
                           <div key={idx} className="group relative aspect-square rounded-xl overflow-hidden bg-white border border-gray-100 shadow-sm">
                             <img 
