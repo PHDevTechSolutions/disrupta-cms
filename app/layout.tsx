@@ -5,7 +5,7 @@ import { Toaster } from "sonner"; // 1. Import the Toaster
 import "./globals.css";
 
 const geistSans = Geist({
-  variable: "--font-geist-sans",
+  variable: "--font-geist-sans", //font
   subsets: ["latin"],
 });
 
